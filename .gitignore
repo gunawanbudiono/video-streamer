@@ -1,0 +1,6 @@
+node_modules/
+data-warehouse/
+scratch/
+*.log
+.env
+public/uploads/

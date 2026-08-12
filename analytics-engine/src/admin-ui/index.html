@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Engine — Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0a0a0f;
+            --surface: #12121a;
+            --surface2: #1a1a26;
+            --border: rgba(255, 255, 255, 0.06);
+            --border-hover: rgba(255, 255, 255, 0.12);
+            --text: #e2e2e8;
+            --text-dim: #8888a0;
+            --text-muted: #55556a;
+            --primary: #7c5cfc;
+            --primary-dim: rgba(124, 92, 252, 0.15);
+            --green: #22c55e;
+            --green-dim: rgba(34, 197, 94, 0.1);
+            --red: #ef4444;
+            --red-dim: rgba(239, 68, 68, 0.1);
+            --amber: #f59e0b;
+            --amber-dim: rgba(245, 158, 11, 0.1);
+            --radius: 10px;
+            --radius-sm: 6px;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* Layout */
+        .app {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 32px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header h1 span {
+            color: var(--primary);
+        }
+
+        /* Login */
+        .login {
+            max-width: 400px;
+            margin: 120px auto;
+        }
+
+        .login h2 {
+            text-align: center;
+            margin-bottom: 24px;
+            font-size: 18px;
+        }
+
+        .login-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 2px;
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 3px;
+            margin-bottom: 24px;
+            border: 1px solid var(--border);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px 16px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 600;
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            transition: all 0.15s;
+        }
+
+        .tab:hover {
+            color: var(--text);
+            background: var(--surface2);
+        }
+
+        .tab.active {
+            color: white;
+            background: var(--primary);
+        }
+
+        /* Cards / Tables */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+
+        .card-header {
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .card-header h3 {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .card-body {
+            padding: 16px 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th {
+            text-align: left;
+            padding: 10px 16px;
+            color: var(--text-dim);
+            font-weight: 500;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        /* Forms */
+        .form-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .form-row>* {
+            flex: 1;
+        }
+
+        input,
+        select {
+            width: 100%;
+            height: 38px;
+            padding: 0 12px;
+            font-size: 13px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        input:focus,
+        select:focus {
+            border-color: var(--primary);
+        }
+
+        input::placeholder {
+            color: var(--text-muted);
+        }
+
+        label {
+            display: block;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-dim);
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-dim);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover {
+            color: var(--text);
+            border-color: var(--border-hover);
+        }
+
+        .btn-danger {
+            background: var(--red-dim);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 11px;
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 8px;
+            font-size: 10px;
+            font-weight: 600;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-green {
+            background: var(--green-dim);
+            color: var(--green);
+        }
+
+        .badge-red {
+            background: var(--red-dim);
+            color: var(--red);
+        }
+
+        .badge-amber {
+            background: var(--amber-dim);
+            color: var(--amber);
+        }
+
+        /* Key display */
+        .key-reveal {
+            background: var(--amber-dim);
+            border: 1px dashed rgba(245, 158, 11, 0.3);
+            border-radius: var(--radius-sm);
+            padding: 12px 16px;
+            margin-top: 12px;
+        }
+
+        .key-reveal code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--amber);
+            word-break: break-all;
+        }
+
+        .key-reveal .warn {
+            font-size: 11px;
+            color: var(--amber);
+            margin-top: 6px;
+            opacity: 0.7;
+        }
+
+        /* Utilities */
+        .mono {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 12px;
+        }
+
+        .empty {
+            padding: 40px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .mt-12 {
+            margin-top: 12px;
+        }
+
+        .mt-20 {
+            margin-top: 20px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .flex-between {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            z-index: 999;
+            animation: fadeIn 0.2s;
+        }
+
+        .toast-ok {
+            background: var(--green-dim);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .toast-err {
+            background: var(--red-dim);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ── Modals ── */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .modal-backdrop.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            width: 95%;
+            max-width: var(--modal-width, 400px);
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            transform: scale(0.95) translateY(10px);
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .modal-backdrop.show .modal-card {
+            transform: scale(1) translateY(0);
+        }
+
+        .modal-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .modal-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+
+        .modal-input {
+            width: 100%;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login">
+        <h2>⚡ Analytics Engine Admin</h2>
+        <div class="login-box">
+            <label>Super Admin Key</label>
+            <input type="password" id="adminKeyInput" placeholder="Masukkan SUPER_ADMIN_KEY...">
+            <button class="btn btn-primary mt-12" style="width:100%" onclick="doLogin()">Login</button>
+            <p id="loginError" class="hidden" style="color:var(--red);font-size:12px;margin-top:10px;text-align:center">
+            </p>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" class="app hidden">
+        <div class="header">
+            <h1><span>⚡</span> Analytics Engine Admin</h1>
+            <button class="btn btn-ghost btn-sm" onclick="doLogout()">Logout</button>
+        </div>
+
+        <!-- Modal Template -->
+        <div id="customModal" class="modal-backdrop">
+            <div class="modal-card">
+                <div id="modalIcon" style="font-size: 24px; margin-bottom: 12px;"></div>
+                <div class="modal-title" id="modalTitle">Konfirmasi</div>
+                <div class="modal-desc" id="modalDesc">Apakah Anda yakin?</div>
+                <input type="text" id="modalInput" class="modal-input" autocomplete="off" autocorrect="off"
+                    placeholder="Ketik disini...">
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" id="modalCancelBtn">Batal</button>
+                    <button class="btn btn-primary" id="modalConfirmBtn">Ya, Lanjutkan</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="toastContainer"></div>
+
+        <!-- Orgs View -->
+        <div id="view-orgs">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Organizations</h3>
+                    <button class="btn btn-primary btn-sm" onclick="toggleNewOrg()">+ New Org</button>
+                </div>
+                <!-- New Org Form -->
+                <div id="newOrgForm" class="card-body hidden"
+                    style="border-bottom:1px solid var(--border);background:var(--surface2)">
+                    <div class="form-row">
+                        <div><label>Org ID</label><input id="newOrgId" placeholder="neonvault"></div>
+                        <div><label>Org Name</label><input id="newOrgName" placeholder="NeonVault Music"></div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="createOrg()">Create Organization</button>
+                    <div id="newOrgKey" class="key-reveal hidden"></div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Org ID</th>
+                            <th>Name</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="orgsTable">
+                        <tr>
+                            <td colspan="5" class="empty">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- CMS View (Drill-down) -->
+        <div id="view-cms" class="hidden">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 16px;">
+                <h2 style="margin:0; font-size:20px; display:flex; align-items:center; gap:12px;">
+                    <button class="btn btn-ghost btn-sm" style="padding: 4px 12px; font-weight: 500;"
+                        onclick="showOrgsView()">← Back</button>
+                    CMS Registry <span id="currentOrgBadge" class="badge badge-amber" style="font-size:12px;"></span>
+                </h2>
+                <button class="btn btn-primary btn-sm" onclick="toggleNewCms()">+ Register CMS</button>
+            </div>
+
+            <div class="card">
+                <!-- New CMS Form -->
+                <div id="newCmsForm" class="card-body hidden"
+                    style="border-bottom:1px solid var(--border);background:var(--surface2)">
+                    <div class="form-row">
+                        <div><label>CMS ID</label><input id="newCmsId" placeholder="ebony_delapan_belas"></div>
+                        <div><label>CMS Name</label><input id="newCmsName" placeholder="Ebony Delapan Belas"></div>
+                    </div>
+                    <!-- Org implicit -->
+                    <button class="btn btn-primary btn-sm" onclick="createCms()">Register CMS</button>
+                    <div id="newCmsKey" class="key-reveal hidden"></div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>CMS ID</th>
+                            <th>Name</th>
+                            <th>Database</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="cmsTable">
+                        <tr>
+                            <td colspan="6" class="empty">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let adminKey = '';
+
+        // ── Auth ──
+        function doLogin() {
+            adminKey = document.getElementById('adminKeyInput').value.trim();
+            if (!adminKey) return;
+            // Test the key by listing orgs
+            apiFetch('/api/v1/admin/orgs').then(res => {
+                if (res.data) {
+                    sessionStorage.setItem('ak', adminKey);
+                    document.getElementById('loginScreen').classList.add('hidden');
+                    document.getElementById('mainApp').classList.remove('hidden');
+                    loadOrgs();
+                    loadCms();
+                }
+            }).catch(() => {
+                document.getElementById('loginError').textContent = 'Invalid admin key';
+                document.getElementById('loginError').classList.remove('hidden');
+            });
+        }
+
+        function doLogout() {
+            adminKey = '';
+            sessionStorage.removeItem('ak');
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+            document.getElementById('adminKeyInput').value = '';
+        }
+
+        // Auto-login from session
+        (function () {
+            const saved = sessionStorage.getItem('ak');
+            if (saved) {
+                adminKey = saved;
+                document.getElementById('adminKeyInput').value = saved;
+                doLogin();
+            }
+        })();
+
+        // ── Modals ──
+        function showModal(options) {
+            return new Promise(resolve => {
+                const modal = document.getElementById('customModal');
+                const titleEl = document.getElementById('modalTitle');
+                const descEl = document.getElementById('modalDesc');
+                const iconEl = document.getElementById('modalIcon');
+                const inputEl = document.getElementById('modalInput');
+                const cancelBtn = document.getElementById('modalCancelBtn');
+                const confirmBtn = document.getElementById('modalConfirmBtn');
+
+                // Setup content
+                titleEl.textContent = options.title || 'Konfirmasi';
+                descEl.innerHTML = options.rawHtml ? (options.desc || '') : (options.desc || '').replace(/\n/g, '<br>');
+                iconEl.textContent = options.icon || '⚠️';
+                iconEl.style.display = options.icon ? 'block' : 'none';
+
+                // Allow custom width
+                const cardEl = document.querySelector('.modal-card');
+                if (options.width) {
+                    cardEl.style.width = '100%';
+                    cardEl.style.height = 'auto';
+                    cardEl.style.maxWidth = options.width;
+                    cardEl.style.maxHeight = '90vh';
+                    cardEl.style.borderRadius = 'var(--radius-lg)';
+                    cardEl.style.display = 'block';
+                    if (descEl) {
+                        descEl.style.flex = 'none';
+                        descEl.style.display = 'block';
+                    }
+                } else {
+                    cardEl.style.width = '95%';
+                    cardEl.style.height = 'auto';
+                    cardEl.style.maxWidth = '400px';
+                    cardEl.style.maxHeight = '90vh';
+                    cardEl.style.borderRadius = 'var(--radius-lg)';
+                    cardEl.style.padding = '24px';
+                    cardEl.style.display = 'block';
+                    if (descEl) {
+                        descEl.style.flex = 'none';
+                        descEl.style.display = 'block';
+                    }
+                }
+
+                // Setup Input
+                if (options.type === 'prompt') {
+                    inputEl.style.display = 'block';
+                    inputEl.value = '';
+                    inputEl.placeholder = options.placeholder || 'Ketik disini...';
+                } else {
+                    inputEl.style.display = 'none';
+                    inputEl.value = '';
+                }
+
+                // Setup Buttons
+                confirmBtn.textContent = options.confirmText || 'Ya, Lanjutkan';
+                confirmBtn.className = 'btn ' + (options.danger ? 'btn-danger' : 'btn-primary');
+
+                if (options.type === 'alert') {
+                    cancelBtn.style.display = 'none';
+                } else {
+                    cancelBtn.style.display = 'block';
+                    cancelBtn.textContent = options.cancelText || 'Batal';
+                }
+
+                // Show modal
+                modal.classList.add('show');
+                if (options.type === 'prompt') inputEl.focus();
+
+                const cleanup = () => {
+                    modal.classList.remove('show');
+                    confirmBtn.onclick = null;
+                    cancelBtn.onclick = null;
+                };
+
+                confirmBtn.onclick = () => {
+                    const val = options.type === 'prompt' ? inputEl.value.trim() : true;
+                    cleanup();
+                    resolve(val);
+                };
+
+                cancelBtn.onclick = () => {
+                    cleanup();
+                    resolve(options.type === 'prompt' ? null : false);
+                };
+            });
+        }
+
+        function showConfirm(title, desc, danger = false, confirmText = 'Ya') {
+            return showModal({ type: 'confirm', title, desc, danger, confirmText, icon: danger ? '⚠️' : '❓' });
+        }
+
+        function showPrompt(title, desc, placeholder = '') {
+            return showModal({ type: 'prompt', title, desc, placeholder, icon: '✏️', confirmText: 'Submit' });
+        }
+
+        function showAlert(title, desc, width = null, rawHtml = false) {
+            return showModal({ type: 'alert', title, desc, icon: 'ℹ️', confirmText: 'Tutup', width, rawHtml });
+        }
+
+        // ── API ──
+        async function apiFetch(path, opts = {}) {
+            const headers = { 'X-Admin-Key': adminKey, ...opts.headers };
+            if (opts.body) headers['Content-Type'] = 'application/json';
+
+            const res = await fetch(API_BASE + path, {
+                ...opts,
+                headers,
+                body: opts.body ? JSON.stringify(opts.body) : undefined,
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: res.statusText }));
+                throw new Error(err.error || 'Request failed');
+            }
+            return res.json();
+        }
+
+        // ── Navigation (Master-Detail) ──
+        let currentOrgId = null;
+
+        function showOrgsView() {
+            currentOrgId = null;
+            document.getElementById('view-cms').classList.add('hidden');
+            document.getElementById('view-orgs').classList.remove('hidden');
+            document.getElementById('newCmsForm').classList.add('hidden');
+            document.getElementById('newCmsKey').classList.add('hidden');
+        }
+
+        function showCmsView(orgId) {
+            currentOrgId = orgId;
+            document.getElementById('currentOrgBadge').textContent = orgId.toUpperCase();
+            document.getElementById('view-orgs').classList.add('hidden');
+            document.getElementById('view-cms').classList.remove('hidden');
+            renderCms();
+        }
+
+        // ── Orgs ──
+        let orgs = [];
+        async function loadOrgs() {
+            try {
+                const res = await apiFetch('/api/v1/admin/orgs');
+                orgs = res.data || [];
+                renderOrgs();
+            } catch (e) { showToast(e.message, true); }
+        }
+
+        function renderOrgs() {
+            const tbody = document.getElementById('orgsTable');
+            if (orgs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty">No organizations yet</td></tr>';
+                return;
+            }
+            tbody.innerHTML = orgs.map(o => `
+        <tr>
+            <td class="mono">${esc(o.org_id)}</td>
+            <td>${esc(o.org_name)}</td>
+            <td>${o.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Inactive</span>'}</td>
+            <td style="color:var(--text-muted);font-size:12px">${fmtDate(o.created_at)}</td>
+            <td style="display:flex;gap:4px">
+                <button class="btn btn-primary btn-sm" onclick="showCmsView('${esc(o.org_id)}')">📁 Manage CMS</button>
+                <button class="btn btn-ghost btn-sm" onclick="rotateOrgKey('${esc(o.org_id)}')">🔄 Key</button>
+                <button class="${o.is_active ? 'btn-danger' : 'btn-ghost'} btn btn-sm" onclick="toggleOrg('${esc(o.org_id)}', ${o.is_active})" title="${o.is_active ? 'Deactivate' : 'Reactivate'} Org">
+                    ${o.is_active ? '⏸️' : '▶️'}
+                </button>
+                ${!o.is_active ? `<button class="btn btn-danger btn-sm" onclick="hardDeleteOrg('${esc(o.org_id)}')" title="Hard Delete Org">🗑️</button>` : ''}
+            </td>
+        </tr>
+    `).join('');
+        }
+
+        function toggleNewOrg() {
+            document.getElementById('newOrgForm').classList.toggle('hidden');
+            document.getElementById('newOrgKey').classList.add('hidden');
+        }
+
+        async function createOrg() {
+            const org_id = document.getElementById('newOrgId').value.trim();
+            const org_name = document.getElementById('newOrgName').value.trim();
+            if (!org_id || !org_name) return showToast('Fill both fields', true);
+            try {
+                const res = await apiFetch('/api/v1/admin/orgs', { method: 'POST', body: { org_id, org_name } });
+                const keyDiv = document.getElementById('newOrgKey');
+                keyDiv.innerHTML = `<code>${esc(res.org_key)}</code><div class="warn">⚠️ Save this key — it will NOT be shown again!</div>`;
+                keyDiv.classList.remove('hidden');
+                showToast('Organization created');
+                loadOrgs();
+            } catch (e) { showToast(e.message, true); }
+        }
+
+        async function rotateOrgKey(orgId) {
+            const confirmed = await showConfirm(`Rotate Key`, `Rotate API key for org "${orgId}"?\nOld key will be invalidated.`, true);
+            if (!confirmed) return;
+            try {
+                const res = await apiFetch(`/api/v1/admin/orgs/${orgId}/rotate-key`, { method: 'POST' });
+                await showAlert('New API Key', `Key:\n<code>${res.org_key}</code>\n\n⚠️ Save this — it won't be shown again!`);
+                showToast('Key rotated');
+            } catch (e) { showToast(e.message, true); }
+        }
+
+        // ── CMS ──
+        let cmsList = [];
+        async function loadCms() {
+            try {
+                const res = await apiFetch('/api/v1/admin/cms-registry');
+                cmsList = res.data || [];
+                renderCms();
+            } catch (e) { showToast(e.message, true); }
+        }
+
+        function renderCms() {
+            const tbody = document.getElementById('cmsTable');
+            const filtered = cmsList.filter(c => c.org_id === currentOrgId);
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty">No CMS registered yet for this org</td></tr>';
+                return;
+            }
+            tbody.innerHTML = filtered.map(c => `
+        <tr>
+            <td class="mono">${esc(c.cms_id)}</td>
+            <td>${esc(c.cms_name)}</td>
+            <td>
+                <div class="mono" style="font-size:11px;color:var(--text-dim)">${esc(c.db_name)}</div>
+                <div id="metrics-${esc(c.cms_id)}" style="font-size:11px; margin-top:4px; color:var(--text-muted)">
+                    <span style="opacity:0.5">Loading stats...</span>
+                </div>
+            </td>
+            <td>${c.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Inactive</span>'}</td>
+            <td style="display:flex;gap:4px;justify-content:flex-end">
+                <button class="btn btn-ghost btn-sm" onclick="showCmsMetrics('${esc(c.cms_id)}', '${esc(c.db_name)}')" title="View DB Storage Details">📊 Info</button>
+                <button class="btn btn-ghost btn-sm" onclick="rotateCmsKey('${esc(c.cms_id)}')">🔄 Key</button>
+                <button class="${c.is_active ? 'btn-danger' : 'btn-ghost'} btn btn-sm" onclick="toggleCms('${esc(c.cms_id)}', ${c.is_active})" title="${c.is_active ? 'Deactivate' : 'Reactivate'} CMS">
+                    ${c.is_active ? '⏸️' : '▶️'}
+                </button>
+                ${!c.is_active ? `<button class="btn btn-danger btn-sm" onclick="hardDeleteCms('${esc(c.cms_id)}')" title="Hard Delete & Drop DB">🗑️</button>` : ''}
+            </td>
+        </tr>
+    `).join('');
+
+            // Asynchronously load the top-level metrics for each active CMS
+            filtered.filter(c => c.is_active).forEach(c => fetchCmsTableMetric(c.cms_id));
+        }
+
+        async function fetchCmsTableMetric(cmsId) {
+            try {
+                const res = await apiFetch(`/api/v1/admin/cms-registry/${cmsId}/metrics`);
+                const el = document.getElementById(`metrics-${cmsId}`);
+                if (el) {
+                    el.innerHTML = `<span><b style="color:var(--text)">${res.total_rows.toLocaleString()}</b> rows</span> &nbsp;|&nbsp; <span><b style="color:var(--text)">${res.total_size}</b></span>`;
+                }
+            } catch (e) {
+                const el = document.getElementById(`metrics-${cmsId}`);
+                if (el) el.innerHTML = `<span style="color:var(--red)">Failed to load</span>`;
+            }
+        }
+
+        async function showCmsMetrics(cmsId, dbName) {
+            try {
+                // Preserve open states if modal is already open
+                const openPeriods = [];
+                const modal = document.getElementById('customModal');
+                if (modal.classList.contains('show')) {
+                    const tbodys = document.querySelectorAll('tbody[id^="period-"]');
+                    tbodys.forEach(t => {
+                        if (!t.classList.contains('hidden')) openPeriods.push(t.id);
+                    });
+                } else {
+                    showToast('Menganalisis database...', false);
+                }
+
+                const res = await apiFetch(`/api/v1/admin/cms-registry/${cmsId}/metrics`);
+
+                let html = `<div style="text-align:left; margin-top: 16px;">
+                    <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom: 20px; padding: 16px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;">
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Database Overview</span>
+                                <button onclick="showCmsMetrics('${cmsId}', '${dbName}')" style="background:none; border:none; cursor:pointer; color:var(--primary); font-size:12px; display:flex; align-items:center; opacity:0.8; transition:0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'" title="Refresh Metrik">🔄 Refresh</button>
+                            </div>
+                            <div style="font-size: 14px; color: var(--text-muted);">Metrics for <b style="color: var(--text); font-family: monospace;">${dbName}</b></div>
+                        </div>
+                        <div style="display: flex; gap: 32px; text-align: right;">
+                            <div style="display: flex; flex-direction: column; gap: 6px;">
+                                <span style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Total Rows</span>
+                                <span class="mono" style="font-size: 18px; font-weight: 500; color: var(--text);">${res.total_rows.toLocaleString()}</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 6px;">
+                                <span style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Total Storage</span>
+                                <span class="mono" style="font-size: 18px; font-weight: 600; color: #c084fc;">${res.total_size}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="max-height: 55vh; overflow-y: auto; overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface2);">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                            <thead style="background: rgba(255, 255, 255, 0.03); position: sticky; top: 0; backdrop-filter: blur(8px); z-index: 1;">
+                                <tr>
+                                    <th style="padding: 14px 20px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Table Name</th>
+                                    <th style="padding: 14px 20px; text-align: right; border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Row Count</th>
+                                    <th style="padding: 14px 20px; text-align: right; border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Raw Data</th>
+                                    <th style="padding: 14px 20px; text-align: right; border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Compressed Storage</th>
+                                </tr>
+                            </thead>`;
+
+                if (!res.periods || res.periods.length === 0) {
+                    html += `<tbody><tr><td colspan="4" style="padding: 32px; text-align: center; color: var(--text-muted); font-size: 14px;">Database is empty</td></tr></tbody>`;
+                } else {
+                    res.periods.forEach((p, index) => {
+                        const rowId = `period-${index}`;
+                        const isSystem = p.period === 'System / Metadata Tables';
+                        const isOpen = openPeriods.includes(rowId);
+                        const iconText = isOpen ? '▼' : '▶';
+
+                        let displayPeriod = p.period;
+                        const match = p.period.match(/\\d{6}/);
+                        if (match) {
+                            displayPeriod = match[0].substring(0, 4) + '-' + match[0].substring(4, 6);
+                        } else if (p.period.startsWith('(')) {
+                            displayPeriod = p.period.replace(/[^a-zA-Z0-9_-]/g, '');
+                        }
+
+                        const badgeColor = isSystem ? 'rgba(255, 255, 255, 0.1)' : 'rgba(56, 189, 248, 0.15)';
+                        const textColor = isSystem ? 'var(--text-dim)' : '#38bdf8';
+                        const titleText = isSystem ? p.period : `Periode: ${displayPeriod}`;
+
+                        html += `
+                            <tbody style="border-bottom: 2px solid var(--surface);">
+                                <tr style="cursor: pointer; transition: background 0.1s; background: rgba(0,0,0,0.2);" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='rgba(0,0,0,0.2)'" onclick="document.getElementById('${rowId}').classList.toggle('hidden'); const icon = document.getElementById('icon-${rowId}'); icon.textContent = icon.textContent === '▶' ? '▼' : '▶';">
+                                    <td style="padding: 12px 20px; border-bottom: 1px solid var(--border);" class="mono">
+                                        <div style="font-weight: 600; font-size: 13px; color: var(--text); display: flex; align-items: center; gap: 8px;">
+                                            <span id="icon-${rowId}" style="display:inline-block; width: 14px; font-size: 10px; color: var(--text-dim); transition: transform 0.2s;">${iconText}</span>
+                                            ${titleText}
+                                        </div>
+                                    </td>
+                                    <td style="padding: 12px 20px; border-bottom: 1px solid var(--border); text-align: right;" class="mono">${parseInt(p.total_rows).toLocaleString()}</td>
+                                    <td style="padding: 12px 20px; border-bottom: 1px solid var(--border); text-align: right;" class="mono"><span style="color:var(--text-dim); font-size:11px;">${p.total_uncompressed_formatted ? esc(p.total_uncompressed_formatted) : '-'}</span></td>
+                                    <td style="padding: 12px 20px; border-bottom: 1px solid var(--border); text-align: right;" class="mono">
+                                        <span style="background: ${badgeColor}; color: ${textColor}; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 12px;">${esc(p.total_size_formatted)}</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody id="${rowId}" class="${isOpen ? '' : 'hidden'}">`;
+
+                        p.tables.forEach(t => {
+                            let displayName = esc(t.table);
+                            let padLeft = '48px';
+                            let icon = '↳';
+                            let textStyle = 'color: var(--text-dim);';
+                            let isLogical = false;
+
+                            if (t.table.startsWith('[Storage Block]')) {
+                                icon = '📦';
+                                displayName = esc(t.table.replace('[Storage Block] ', ''));
+                                padLeft = '36px';
+                                textStyle = 'color: #94a3b8; font-weight: 500;';
+                            } else if (t.table.includes('(') && t.table.includes(')')) {
+                                isLogical = true;
+                                padLeft = '64px';
+                                icon = '├─';
+                                // Extract the text inside parentheses for highlight
+                                const parts = t.table.split('(');
+                                if (parts.length > 1) {
+                                    const base = parts[0].trim();
+                                    const logicalName = parts[1].replace(')', '');
+                                    displayName = `<span style="opacity: 0.5;">${esc(base)}</span> <span style="color: #cbd5e1; font-weight: 500;">/ ${esc(logicalName)}</span>`;
+                                }
+                            } else {
+                                padLeft = '36px';
+                                icon = '📄';
+                            }
+
+                            html += `
+                                <tr style="background: rgba(255,255,255,0.01);">
+                                    <td style="padding: 8px 20px 8px ${padLeft}; border-bottom: 1px solid var(--surface);" class="mono">
+                                        <div style="font-size: 12px; ${textStyle}">${icon} ${isLogical ? displayName : esc(displayName)}</div>
+                                    </td>
+                                    <td style="padding: 8px 20px; border-bottom: 1px solid var(--surface); text-align: right; color: var(--text-dim);" class="mono">${parseInt(t.total_rows).toLocaleString()}</td>
+                                    <td style="padding: 8px 20px; border-bottom: 1px solid var(--surface); text-align: right;" class="mono"><span style="color:var(--text-dim); font-size:11px;">${esc(t.data_uncompressed)}</span></td>
+                                    <td style="padding: 8px 20px; border-bottom: 1px solid var(--surface); text-align: right;" class="mono">
+                                        <span style="color: #c084fc; font-weight: 500; font-size: 12px;">${esc(t.data_compressed)}</span>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                        html += `</tbody>`;
+                    });
+                }
+
+                html += `</table ></div ></div > `;
+
+                // Show as an alert modal bounded to main app width (1000px) and pass rawHtml=true
+                showAlert(`Storage: ${dbName} `, html, '1000px', true);
+            } catch (err) {
+                showAlert('Analysis Failed', 'Tidak dapat memuat detail tabel untuk database ' + dbName + '.<br><br>' + err.message);
+            }
+        }
+
+        function toggleNewCms() {
+            document.getElementById('newCmsForm').classList.toggle('hidden');
+            document.getElementById('newCmsKey').classList.add('hidden');
+        }
+
+        async function createCms() {
+            const cms_id = document.getElementById('newCmsId').value.trim();
+            const cms_name = document.getElementById('newCmsName').value.trim();
+            const org_id = currentOrgId;
+            if (!cms_id || !cms_name) return showToast('Fill CMS ID and Name', true);
+            try {
+                const res = await apiFetch('/api/v1/admin/cms-registry', { method: 'POST', body: { cms_id, cms_name, org_id } });
+                const keyDiv = document.getElementById('newCmsKey');
+                keyDiv.innerHTML = `< code > ${esc(res.api_key)
+                    }</code > <div class="warn">⚠️ Save this API key — it will NOT be shown again!</div>`;
+                keyDiv.classList.remove('hidden');
+                showToast('CMS registered');
+                loadCms();
+            } catch (e) { showToast(e.message, true); }
+        }
+
+        async function rotateCmsKey(cmsId) {
+            const confirmed = await showConfirm(`Rotate Key`, `Rotate API key for CMS "${cmsId}" ?\nOld key will be invalidated.`, true);
+            if (!confirmed) return;
+            try {
+                const res = await apiFetch(`/ api / v1 / admin / cms - registry / ${cmsId}/rotate-key`, { method: 'POST' });
+                await showAlert('New API Key', `Key:\n<code>${res.api_key}</code>\n\n⚠️ Save this — it won't be shown again!`);
+                showToast('API key rotated');
+            } catch (e) { showToast(e.message, true); }
+        }
+
+        async function toggleCms(cmsId, currentActive) {
+            const actionStr = currentActive ? "Deactivate" : "Reactivate";
+            const isDanger = currentActive; // Deactivating is destructive temporarily
+            const confirmed = await showConfirm(`${actionStr} CMS`, `Are you sure you want to ${actionStr.toLowerCase()} CMS "${cmsId}"?`, isDanger, actionStr);
+            if (!confirmed) return;
+            try {
+                // If it's a deactivation, we still support the old DELETE /api/v1/admin/cms-registry/:id as soft-delete
+                // But let's use the new universal toggle endpoint
+                await apiFetch(`/api/v1/admin/cms-registry/${cmsId}/toggle`, { method: 'PATCH' });
+                showToast(`CMS ${currentActive ? 'deactivated' : 'reactivated'}`);
+                loadCms();
+            } catch (e) { showToast(e.message, true); }
+        }
+
+        async function hardDeleteCms(cmsId) {
+            const confirmed = await showConfirm(
+                `⚠️ DELETE ALL DATA FOREVER ⚠️`,
+                `Hard Delete CMS "${cmsId}"?\n\nThis will DROP its database AND delete its registry. ALL DATA WILL BE LOST PERMANENTLY.`,
+                true,
+                'Continue'
+            );
+            if (!confirmed) return;
+
+            const input = await showPrompt('Confirm Deletion', `Type "<b>${cmsId}</b>" below to confirm deletion:`, cmsId);
+            if (input !== cmsId) return showToast('Delete cancelled', true);
+
+            try {
+                const res = await apiFetch(`/api/v1/admin/cms-registry/${cmsId}/hard`, { method: 'DELETE' });
+                showToast(res.message);
+                loadCms();
+            } catch (e) { showToast(e.message, true); }
+        }
+
+        async function toggleOrg(orgId, currentActive) {
+            const actionStr = currentActive ? "Deactivate" : "Reactivate";
+            const isDanger = currentActive;
+            const confirmed = await showConfirm(`${actionStr} Org`, `Are you sure you want to ${actionStr.toLowerCase()} organization "${orgId}"?`, isDanger, actionStr);
+            if (!confirmed) return;
+            try {
+                await apiFetch(`/api/v1/admin/orgs/${orgId}/toggle`, { method: 'PATCH' });
+                showToast(`Organization ${currentActive ? 'deactivated' : 'reactivated'}`);
+                loadOrgs();
+            } catch (e) { showToast(e.message, true); }
+        }
+
+        async function hardDeleteOrg(orgId) {
+            const confirmed = await showConfirm(
+                `⚠️ DELETE FOLDER & DB ACCESS ⚠️`,
+                `Hard Delete Org "${orgId}"?\n\nThis will permanently remove the organization from the registry. You can only do this if it has NO CMS registries attached.`,
+                true,
+                'Continue'
+            );
+            if (!confirmed) return;
+
+            const input = await showPrompt('Confirm Deletion', `Type "<b>${orgId}</b>" below to confirm deletion:`, orgId);
+            if (input !== orgId) return showToast('Delete cancelled', true);
+
+            try {
+                const res = await apiFetch(`/api/v1/admin/orgs/${orgId}/hard`, { method: 'DELETE' });
+                showToast(res.message);
+                loadOrgs();
+            } catch (e) {
+                showAlert('Penghapusan Gagal', e.message);
+            }
+        }
+
+        async function assignCmsOrg(cmsId) {
+            const orgListStr = orgs.map(o => o.org_id).join(', ');
+            const orgId = await showPrompt(`Assign Org`, `Assign CMS "${cmsId}" to which org ID?\n\nAvailable: ${orgListStr}`, 'neonvault');
+            if (!orgId) return;
+            try {
+                await apiFetch(`/api/v1/admin/cms-registry/${cmsId}/org`, { method: 'PATCH', body: { org_id: orgId } });
+                showToast(`CMS assigned to ${orgId}`);
+                loadCms();
+            } catch (e) { showToast(e.message, true); }
+        }
+
+        // ── Utils ──
+        function esc(str) { const d = document.createElement('div'); d.textContent = str || ''; return d.innerHTML; }
+        function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return d; } }
+        function showToast(msg, isErr = false) {
+            const t = document.createElement('div');
+            t.className = 'toast ' + (isErr ? 'toast-err' : 'toast-ok');
+            t.textContent = msg;
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+    </script>
+</body>
+
+</html>

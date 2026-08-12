@@ -1,0 +1,321 @@
+# Arsitektur Finance Settlement — Solusi Cash Flow Mismatch (Final)
+
+## Latar Belakang
+
+Sistem saat ini di [finance.ts](file:///c:/Antigravity/AI-Music-Ecosystem/neon-vault/src/server/db/schema/finance.ts) punya celah: publish settlement langsung kredit `balance_idr` (satu kolom saldo tunggal) tanpa verifikasi dana riil dari CMS sudah masuk bank. Pengguna bisa tarik uang yang bentuk fisiknya belum diterima perusahaan.
+
+> [!CAUTION]
+> CMS berbeda punya jadwal pencairan berbeda (hari hingga sebulan). Platform belum cukup kas untuk talangan.
+
+---
+
+## Keputusan Desain yang Disepakati
+
+| # | Keputusan | Detail |
+|---|-----------|--------|
+| 1 | Dual-balance wallet | `accrued` (tercatat) vs `available` (bisa tarik) vs `locked` (proses penarikan) |
+| 2 | Info CMS tersembunyi dari user | User hanya lihat agregat, tidak tahu nama/detail CMS |
+| 3 | **Hybrid visibility** | Admin bisa set per batch: visible ("Dalam Proses") atau hidden (user tidak lihat sama sekali) |
+| 4 | Kurs terkunci saat approval | Tidak berubah saat realisasi |
+| 5 | Skip & publish nyusul | Batch CMS yang diragukan bisa di-skip, publish kapan saja setelah yakin |
+| 6 | Partial payment | Pro-rata release per user jika CMS bayar sebagian |
+| 7 | FIFO auto-split | Jika CMS bayar akumulasi multi-periode, alokasi ke batch terlama dulu |
+
+---
+
+## 1. Perubahan Tabel `wallets`
+
+```diff
+ wallets:
+   id            TEXT PK
+   user_id       TEXT FK → users.id
+-  balance_idr   DECIMAL(15,2) DEFAULT 0.00
++  accrued_balance_idr    DECIMAL(15,2) DEFAULT 0.00  -- Report approved, dana belum cair
++  available_balance_idr  DECIMAL(15,2) DEFAULT 0.00  -- Dana riil sudah masuk, bisa ditarik
++  locked_balance_idr     DECIMAL(15,2) DEFAULT 0.00  -- Sedang proses penarikan
+   created_at    TIMESTAMP
+   updated_at    TIMESTAMP
+```
+
+**Frontend menampilkan:**
+```
+Total Pendapatan    = accrued + available
+Siap Ditarik        = available - locked
+Dalam Proses        = accrued (hanya dari batch visibility='visible')
+```
+
+---
+
+## 2. Tabel Baru: `settlement_batches`
+
+Pecahan settlement per CMS Partner per periode:
+
+```sql
+CREATE TABLE settlement_batches (
+  id                   TEXT PRIMARY KEY,
+  settlement_id        TEXT NOT NULL REFERENCES settlements(id) ON DELETE CASCADE,
+  cms_partner_id       TEXT NOT NULL REFERENCES cms_partners(id),
+  period               TEXT NOT NULL,                        -- 'YYYY-MM'
+
+  -- Amounts dari report CMS
+  total_gross_usd      DECIMAL(20,6) DEFAULT 0,
+  total_net_usd        DECIMAL(20,6) DEFAULT 0,
+  exchange_rate        DECIMAL(15,2) DEFAULT 0,
+  total_payout_idr     DECIMAL(15,2) DEFAULT 0,
+
+  -- Status & approval
+  status               TEXT NOT NULL DEFAULT 'draft',
+  -- draft → calculated → approved → pending_fund → partial → realized
+  approved_by          TEXT REFERENCES users(id),
+  approved_at          TIMESTAMP,
+
+  -- Fund realization tracking
+  realized_amount_idr  DECIMAL(15,2) DEFAULT 0,
+  realization_pct      DECIMAL(5,2) DEFAULT 0,
+  fully_realized_at    TIMESTAMP,
+
+  -- Hybrid visibility: admin pilih per batch
+  visibility           TEXT NOT NULL DEFAULT 'visible',  -- 'visible' | 'hidden'
+  -- visible = user lihat sebagai "Dalam Proses Pencairan"
+  -- hidden  = user tidak lihat sama sekali, saldo muncul saat realize
+
+  notes                TEXT,
+  created_at           TIMESTAMP DEFAULT now(),
+  updated_at           TIMESTAMP DEFAULT now(),
+
+  UNIQUE(settlement_id, cms_partner_id)
+);
+```
+
+### State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> draft: Batch dibuat otomatis
+    draft --> calculated: Hitung revenue & split
+    calculated --> approved: Admin approve batch ini
+    approved --> pending_fund: Publish → kredit accrued
+    pending_fund --> partial: Dana masuk sebagian
+    pending_fund --> realized: Dana masuk 100%
+    partial --> realized: Sisa dana masuk
+    draft --> skipped: Admin skip (ragu dengan CMS)
+    skipped --> calculated: Admin yakin, proses ulang
+```
+
+---
+
+## 3. Tabel Baru: `fund_realizations`
+
+Log setiap pembayaran riil dari CMS ke bank perusahaan:
+
+```sql
+CREATE TABLE fund_realizations (
+  id                   TEXT PRIMARY KEY,
+  settlement_batch_id  TEXT NOT NULL REFERENCES settlement_batches(id),
+  bank_reference       TEXT,
+  payment_date         DATE NOT NULL,
+  amount_received_idr  DECIMAL(15,2) NOT NULL,
+  exchange_rate_used   DECIMAL(15,2),
+  source_type          TEXT DEFAULT 'bank_transfer',   -- 'bank_transfer' | 'manual' | 'offset'
+  verification_status  TEXT DEFAULT 'verified',
+  verified_by          TEXT REFERENCES users(id),
+  notes                TEXT,
+  attachment_url       TEXT,
+  created_by           TEXT REFERENCES users(id),
+  created_at           TIMESTAMP DEFAULT now()
+);
+```
+
+---
+
+## 4. Perubahan Tabel `ledger_entries`
+
+```diff
+ ledger_entries:
+   id                TEXT PK
+   wallet_id         TEXT FK → wallets
+   settlement_id     TEXT FK → settlements
++  batch_id          TEXT FK → settlement_batches
++  realization_id    TEXT FK → fund_realizations  (NULL jika belum realize)
+   amount            DECIMAL(15,2) NOT NULL
+   type              TEXT NOT NULL
++  balance_effect    TEXT NOT NULL DEFAULT 'accrued'  -- 'accrued' | 'available' | 'locked'
+   counterparty_type TEXT DEFAULT 'user'
+   status            TEXT DEFAULT 'published'
+   description       TEXT
+   reference_id      TEXT
+   created_at        TIMESTAMP
+```
+
+---
+
+## 5. Flow Operasional Admin
+
+### A. Publish Settlement (per batch)
+
+```
+Admin approve & publish Batch CMS-A:
+  → Buat ledger {type: 'accrual', balance_effect: 'accrued'}
+  → Update wallet: accrued_balance_idr += amount
+  → User lihat "Dalam Proses" (jika visibility = 'visible')
+  → User TIDAK lihat (jika visibility = 'hidden')
+```
+
+### B. Catat Dana Masuk (Fund Realization)
+
+```
+┌─────────────────────────────────────────────────┐
+│  📥 Catat Dana Masuk                            │
+│  CMS:        [CMS-A           ▼]                │
+│  Jumlah:     [Rp 80.000.000    ]                │
+│  Tgl Masuk:  [15 Mar 2026      ]                │
+│  Ref Bank:   [TRF-202603-XXX   ]                │
+│              [Simpan & Proses]                   │
+└─────────────────────────────────────────────────┘
+```
+
+**Auto-FIFO**: Jika CMS-A punya batch pending di Feb dan Mar, sistem alokasi ke Feb dulu.
+
+**Proses otomatis setelah simpan:**
+1. Catat `fund_realization`
+2. Pro-rata per user: `release = accrual_amount × (received / total_payout)`
+3. Buat ledger pair: `-accrued` & `+available`
+4. Update wallet: `accrued -= release`, `available += release`
+
+### C. Skip Batch CMS yang Diragukan
+
+```
+Batch CMS-B Feb → Status: draft → Admin tidak approve
+Bulan depan:
+  → CMS-B aman → Admin approve & publish batch Feb (nyusul)
+  → CMS-B gagal → Admin delete/write-off batch
+```
+
+---
+
+## 6. Perubahan Flow Existing
+
+### Publish Settlement Route
+
+File: [publish/route.ts](file:///c:/Antigravity/AI-Music-Ecosystem/neon-vault/src/app/api/finance/settlements/%5Bid%5D/publish/route.ts)
+
+```diff
+-// Langsung kredit balance_idr
+-await tx.execute(sql`UPDATE wallets SET balance_idr = balance_idr + ${amount}`);
++// Kredit accrued_balance_idr (belum bisa ditarik)
++await tx.execute(sql`UPDATE wallets SET accrued_balance_idr = accrued_balance_idr + ${amount}`);
+```
+
+### Wallet API Response
+
+File: [wallet/route.ts](file:///c:/Antigravity/AI-Music-Ecosystem/neon-vault/src/app/api/finance/wallet/route.ts)
+
+```diff
+-return { balanceIdr }
++return {
++  totalBalance: accrued + available,
++  accruedBalance: accruedFromVisibleBatches,  // hanya batch visible
++  availableBalance: available,
++  withdrawableBalance: available - locked,
++}
+```
+
+### Withdrawal Validation
+
+```diff
+-if (amount > wallet.balanceIdr) throw "Insufficient balance"
++if (amount > wallet.availableBalanceIdr - wallet.lockedBalanceIdr) throw "Insufficient balance"
+```
+
+---
+
+## 7. ERD
+
+```mermaid
+erDiagram
+    settlements ||--o{ settlement_batches : "has many"
+    settlement_batches }o--|| cms_partners : "belongs to"
+    settlement_batches ||--o{ fund_realizations : "triggers release"
+    settlement_batches ||--o{ ledger_entries : "has many"
+    wallets ||--o{ ledger_entries : "has many"
+    users ||--|| wallets : "owns"
+
+    wallets {
+        text id PK
+        decimal accrued_balance_idr
+        decimal available_balance_idr
+        decimal locked_balance_idr
+    }
+
+    settlement_batches {
+        text id PK
+        text cms_partner_id FK
+        text status
+        text visibility
+        decimal total_payout_idr
+        decimal realized_amount_idr
+    }
+
+    fund_realizations {
+        text id PK
+        text settlement_batch_id FK
+        decimal amount_received_idr
+        text bank_reference
+    }
+
+    ledger_entries {
+        text id PK
+        text wallet_id FK
+        text batch_id FK
+        text realization_id FK
+        text balance_effect
+        decimal amount
+    }
+```
+
+---
+
+## 8. API Endpoints
+
+| Endpoint | Method | Fungsi |
+|----------|--------|--------|
+| `/api/finance/settlements/[id]/batches` | GET | List batch dalam settlement |
+| `/api/finance/settlements/[id]/batches` | POST | Generate batch per CMS |
+| `/api/finance/batches/[id]/approve` | POST | Approve satu batch |
+| `/api/finance/batches/[id]/publish` | POST | Publish → kredit accrued |
+| `/api/finance/batches/[id]/visibility` | PATCH | Toggle visible/hidden |
+| `/api/finance/batches/[id]/realize` | POST | Input fund realization |
+| `/api/finance/batches/[id]/realizations` | GET | Riwayat pembayaran |
+| `/api/finance/realizations/bulk` | POST | FIFO auto-split multi-periode |
+
+---
+
+## 9. Migrasi Data Existing
+
+```sql
+-- Semua saldo lama dianggap sudah available (sudah bisa ditarik selama ini)
+ALTER TABLE wallets ADD COLUMN accrued_balance_idr DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE wallets ADD COLUMN available_balance_idr DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE wallets ADD COLUMN locked_balance_idr DECIMAL(15,2) DEFAULT 0;
+
+UPDATE wallets SET available_balance_idr = balance_idr;
+
+-- Setelah verifikasi, drop kolom lama
+-- ALTER TABLE wallets DROP COLUMN balance_idr;
+```
+
+---
+
+## 10. Verification Plan
+
+### Automated Tests
+- Unit test: pro-rata calculation dengan rounding
+- Unit test: FIFO allocation multi-periode
+- Integration test: publish → realize → check wallet balances
+- Integration test: partial payment → check proportional release
+
+### Manual Verification
+- Publish batch → cek `accrued` naik, `available` tidak berubah
+- Input realization → cek `available` naik, `accrued` turun
+- Toggle visibility → cek wallet API response berubah
+- Withdrawal → validasi hanya dari `available - locked`

@@ -1,0 +1,2121 @@
+<% layout('layout') -%>
+<% function formatFileSize(bytes) { 
+  if (!bytes || bytes === 0) return '0 B';
+  bytes = Number(bytes);
+  if (isNaN(bytes)) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  else if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+  else if (bytes < 1099511627776) return (bytes / 1073741824).toFixed(2) + ' GB';
+  else return (bytes / 1099511627776).toFixed(2) + ' TB';
+} 
+function formatDuration(seconds) { 
+  if (!seconds) return '0:00'; 
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  if (hours > 0) return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+} %>
+
+<div id="galleryPageRoot">
+<div class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+  <div>
+    <h2 class="text-2xl font-bold">Media Gallery</h2>
+    <p class="text-gray-400 text-sm mt-1">
+      <span>Manage your videos and audio for streaming</span>
+      <span id="diskUsageInfoDesktop" class="hidden">
+        <span class="text-gray-500 mx-1">•</span>
+        <i class="ti ti-database text-xs"></i>
+        <span id="diskUsageTextDesktop" class="text-gray-400"></span>
+      </span>
+    </p>
+    <p id="diskUsageInfoMobile" class="hidden text-gray-400 text-sm mt-1">
+      <i class="ti ti-database text-xs mr-1"></i>
+      <span id="diskUsageTextMobile"></span>
+    </p>
+  </div>
+  <div class="flex gap-3">
+    <button onclick="openUploadModal()" class="flex items-center gap-2 bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+      <i class="ti ti-upload"></i>
+      <span>Upload Media</span>
+    </button>
+    <div class="relative">
+      <button onclick="toggleCloudDropdown()" class="flex items-center gap-2 bg-dark-700 border border-gray-600 hover:bg-dark-600 text-white px-4 py-2 rounded-lg transition-colors">
+        <i class="ti ti-cloud-download"></i>
+        <span>Import from Cloud</span>
+        <i class="ti ti-chevron-down text-sm"></i>
+      </button>
+      <div id="cloudDropdown" class="hidden absolute right-0 mt-2 w-48 bg-dark-800 border border-gray-700 rounded-lg shadow-xl z-50">
+                <button onclick="openCloudModal('gdrive')" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700 transition-colors rounded-t-lg">
+          <img src="/images/google drive.png" alt="Google Drive" class="w-5 h-5">
+          <span>Google Drive</span>
+        </button>
+        <button onclick="openYoutubeImportModal()" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700 transition-colors rounded-b-lg text-left">
+          <i class="ti ti-brand-youtube text-red-500 text-xl"></i>
+          <div>
+            <span class="block font-medium text-white">YouTube Video</span>
+            <span class="text-[10px] text-gray-400">Download 1080p, 2K, 4K dynamically</span>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="space-y-4 mb-6">
+  <div class="flex items-center gap-2 text-sm text-gray-400">
+    <a href="/gallery" class="hover:text-white transition-colors">Gallery</a>
+    <% if (currentFolder) { %>
+    <i class="ti ti-chevron-right text-xs"></i>
+    <span class="text-white font-medium"><%= currentFolder.name %></span>
+    <% } %>
+  </div>
+
+  <% if (currentFolder) { %>
+  <div id="rootDropZone" class="border border-dashed border-gray-600 rounded-lg px-4 py-3 text-sm text-gray-400 bg-dark-800/50">
+    Drag file here to move it back to root
+  </div>
+  <% } %>
+</div>
+
+<%
+  const hasRootFolders = !currentFolder && folders && folders.length > 0;
+  const galleryItemCount = (videos ? videos.length : 0) + (hasRootFolders ? folders.length : 0);
+  const hasGalleryItems = galleryItemCount > 0;
+%>
+
+<div class="bg-gray-800 rounded-lg shadow-md overflow-hidden">
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between p-4 border-b border-gray-700 gap-4">
+    <div class="flex items-center gap-3">
+      <div class="relative w-full sm:w-64">
+        <input type="text" id="searchInput" placeholder="Search files and folders..."
+          class="w-full bg-dark-700 border border-gray-600 text-white pl-9 pr-4 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary">
+        <i class="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+      </div>
+      <select id="typeFilter" class="bg-dark-700 border border-gray-600 text-white px-3 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary">
+        <option value="all">All Media</option>
+        <option value="video">Video</option>
+        <option value="audio">Audio</option>
+      </select>
+      <select id="sortSelect" class="bg-dark-700 border border-gray-600 text-white px-3 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary">
+        <option value="newest">Newest</option>
+        <option value="oldest">Oldest</option>
+        <option value="name">Name</option>
+        <option value="size">Size</option>
+      </select>
+    </div>
+    <div class="flex items-center gap-2">
+      <% if (!currentFolder) { %>
+      <button onclick="openCreateFolderDialog()" class="w-10 h-10 flex items-center justify-center bg-dark-700 border border-gray-600 hover:bg-dark-600 text-white rounded-lg transition-colors" title="Create folder" aria-label="Create folder">
+        <i class="ti ti-folder-plus text-lg"></i>
+      </button>
+      <% } %>
+      <div class="flex items-center bg-dark-700 border border-gray-600 rounded-lg overflow-hidden">
+        <button id="gridViewBtn" class="px-3 py-2 bg-primary text-white" title="Grid view">
+          <i class="ti ti-layout-grid"></i>
+        </button>
+        <button id="listViewBtn" class="px-3 py-2 text-gray-400 hover:text-white transition-colors" title="List view">
+          <i class="ti ti-list"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="galleryContent" class="p-4">
+    <% if (hasGalleryItems) { %>
+    <div id="gridView" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <% if (hasRootFolders) { %>
+      <% folders.forEach(function(folder) { %>
+      <a href="/gallery?folder=<%= folder.id %>" class="gallery-grid-item folder-drop-target group bg-dark-700 rounded-lg border border-transparent hover:border-gray-600 hover:bg-dark-600 transition-all p-4 flex flex-col justify-between min-h-[172px]"
+        data-folder-id="<%= folder.id %>" data-kind="folder" data-type="folder" data-title="<%= folder.name %>" data-date="<%= folder.updated_at || folder.created_at %>" data-size="0">
+        <div class="flex items-start justify-between gap-3">
+          <div class="w-12 h-12 rounded-xl bg-primary/15 text-primary flex items-center justify-center flex-shrink-0">
+            <i class="ti ti-folder text-3xl"></i>
+          </div>
+          <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button class="text-gray-400 hover:text-white p-1" onclick="event.preventDefault(); event.stopPropagation(); showRenameFolderDialog('<%= folder.id %>', '<%= folder.name %>')">
+              <i class="ti ti-pencil text-sm"></i>
+            </button>
+            <button class="text-gray-400 hover:text-red-400 p-1" onclick="event.preventDefault(); event.stopPropagation(); showDeleteFolderDialog('<%= folder.id %>', '<%= folder.name %>')">
+              <i class="ti ti-trash text-sm"></i>
+            </button>
+          </div>
+        </div>
+        <div class="mt-4 min-w-0">
+          <h3 class="font-medium text-sm text-white truncate"><%= folder.name %></h3>
+          <p class="text-xs text-gray-400 mt-1"><%= folder.item_count || 0 %> item<%= (folder.item_count || 0) === 1 ? '' : 's' %></p>
+        </div>
+      </a>
+      <% }); %>
+      <% } %>
+      <% videos.forEach(function(video) { 
+        const isAudio = video.filepath && (video.filepath.includes('/audio/') || video.filepath.endsWith('.m4a') || video.filepath.endsWith('.aac') || video.filepath.endsWith('.mp3'));
+        const mediaType = isAudio ? 'audio' : 'video';
+      %>
+      <div class="gallery-grid-item file-item group bg-dark-700 rounded-lg overflow-hidden border border-transparent hover:border-gray-600 hover:bg-dark-600 transition-all cursor-pointer"
+        data-id="<%= video.id %>" data-kind="file" data-title="<%= video.title %>" data-date="<%= video.upload_date %>" data-size="<%= video.file_size %>" data-type="<%= mediaType %>"
+        draggable="true"
+        onclick="playMedia('<%= video.id %>', '<%= video.title %>', '<%= mediaType %>')">
+        <div class="aspect-video relative overflow-hidden bg-dark-900">
+          <% if (isAudio) { %>
+          <div class="w-full h-full flex items-center justify-center bg-[#181818]">
+            <div class="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
+              <i class="ti ti-music text-3xl text-primary"></i>
+            </div>
+          </div>
+          <% } else { %>
+          <img src="<%= video.thumbnail_path %>" alt="<%= video.title %>" class="w-full h-full object-cover">
+          <% } %>
+          <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <div class="bg-primary/90 w-10 h-10 rounded-full flex items-center justify-center">
+              <i class="ti ti-player-play-filled text-white"></i>
+            </div>
+          </div>
+          <span class="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+            <%= formatDuration(video.duration) %>
+          </span>
+          <% if (isAudio) { %>
+          <span class="absolute top-2 left-2 bg-primary/80 text-white text-xs px-1.5 py-0.5 rounded">
+            <i class="ti ti-music text-xs mr-1"></i>Audio
+          </span>
+          <% } %>
+        </div>
+        <div class="p-3">
+          <h3 class="font-medium text-sm truncate mb-1"><%= video.title %></h3>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-gray-400"><%= formatFileSize(video.file_size) %></span>
+            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button class="text-gray-400 hover:text-white p-1" onclick="event.stopPropagation(); showRenameDialog('<%= video.id %>', '<%= video.title %>')">
+                <i class="ti ti-pencil text-sm"></i>
+              </button>
+              <button class="text-gray-400 hover:text-red-400 p-1" onclick="event.stopPropagation(); showDeleteDialog('<%= video.id %>', '<%= video.title %>')">
+                <i class="ti ti-trash text-sm"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <% }); %>
+    </div>
+
+    <div id="listView" class="hidden">
+      <div class="overflow-x-auto">
+        <table class="min-w-full">
+          <thead class="bg-gray-700">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Name</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-24">Duration</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-28">Size</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-32">Modified</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider w-24">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-700">
+            <% if (hasRootFolders) { %>
+            <% folders.forEach(function(folder) { %>
+            <tr class="gallery-list-item folder-drop-target group hover:bg-dark-700 transition-colors cursor-pointer"
+              data-folder-id="<%= folder.id %>" data-kind="folder" data-type="folder" data-title="<%= folder.name %>" data-date="<%= folder.updated_at || folder.created_at %>" data-size="0"
+              onclick="window.location.href='/gallery?folder=<%= folder.id %>'">
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-8 rounded bg-primary/15 text-primary flex-shrink-0 relative flex items-center justify-center">
+                    <i class="ti ti-folder text-lg"></i>
+                  </div>
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="font-medium text-sm truncate max-w-xs"><%= folder.name %></span>
+                  </div>
+                </div>
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-500">--</td>
+              <td class="px-4 py-3 text-sm text-gray-400"><%= folder.item_count || 0 %> item<%= (folder.item_count || 0) === 1 ? '' : 's' %></td>
+              <td class="px-4 py-3 text-sm text-gray-400"><%= new Date(folder.updated_at || folder.created_at).toLocaleDateString() %></td>
+              <td class="px-4 py-3 text-right">
+                <div class="flex items-center justify-end gap-1">
+                  <button class="p-1.5 hover:bg-dark-600 rounded text-gray-400 hover:text-white transition-colors"
+                    onclick="event.preventDefault(); event.stopPropagation(); showRenameFolderDialog('<%= folder.id %>', '<%= folder.name %>')">
+                    <i class="ti ti-pencil text-sm"></i>
+                  </button>
+                  <button class="p-1.5 hover:bg-dark-600 rounded text-gray-400 hover:text-red-400 transition-colors"
+                    onclick="event.preventDefault(); event.stopPropagation(); showDeleteFolderDialog('<%= folder.id %>', '<%= folder.name %>')">
+                    <i class="ti ti-trash text-sm"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <% }); %>
+            <% } %>
+            <% videos.forEach(function(video) { 
+              const isAudio = video.filepath && (video.filepath.includes('/audio/') || video.filepath.endsWith('.m4a') || video.filepath.endsWith('.aac') || video.filepath.endsWith('.mp3'));
+              const mediaType = isAudio ? 'audio' : 'video';
+            %>
+            <tr class="gallery-list-item file-item-row group hover:bg-dark-700 transition-colors cursor-pointer"
+              data-id="<%= video.id %>" data-kind="file" data-title="<%= video.title %>" data-date="<%= video.upload_date %>" data-size="<%= video.file_size %>" data-type="<%= mediaType %>"
+              draggable="true"
+              onclick="playMedia('<%= video.id %>', '<%= video.title %>', '<%= mediaType %>')">
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-8 rounded overflow-hidden bg-[#181818] flex-shrink-0 relative flex items-center justify-center">
+                    <% if (isAudio) { %>
+                    <i class="ti ti-music text-primary"></i>
+                    <% } else { %>
+                    <img src="<%= video.thumbnail_path %>" alt="" class="w-full h-full object-cover">
+                    <% } %>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-medium text-sm truncate max-w-xs"><%= video.title %></span>
+                  </div>
+                </div>
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-400"><%= formatDuration(video.duration) %></td>
+              <td class="px-4 py-3 text-sm text-gray-400"><%= formatFileSize(video.file_size) %></td>
+              <td class="px-4 py-3 text-sm text-gray-400"><%= new Date(video.upload_date).toLocaleDateString() %></td>
+              <td class="px-4 py-3 text-right">
+                <div class="flex items-center justify-end gap-1">
+                  <button class="p-1.5 hover:bg-dark-600 rounded text-gray-400 hover:text-white transition-colors"
+                    onclick="event.stopPropagation(); showRenameDialog('<%= video.id %>', '<%= video.title %>')">
+                    <i class="ti ti-pencil text-sm"></i>
+                  </button>
+                  <button class="p-1.5 hover:bg-dark-600 rounded text-gray-400 hover:text-red-400 transition-colors"
+                    onclick="event.stopPropagation(); showDeleteDialog('<%= video.id %>', '<%= video.title %>')">
+                    <i class="ti ti-trash text-sm"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <% } else { %>
+    <div class="text-center py-12">
+      <div class="w-16 h-16 rounded-full bg-dark-700 flex items-center justify-center mx-auto mb-4">
+        <i class="ti ti-video text-gray-500 text-2xl"></i>
+      </div>
+      <h3 class="text-lg font-medium text-gray-300 mb-2">No items yet</h3>
+      <p class="text-gray-500 text-sm mb-4">Upload your first media or create a folder to get started</p>
+      <button onclick="openUploadModal()" class="inline-flex items-center gap-2 bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+        <i class="ti ti-upload"></i>
+        <span>Upload Media</span>
+      </button>
+    </div>
+    <% } %>
+  </div>
+
+  <% if (hasGalleryItems) { %>
+  <div id="galleryPaginationBar" class="px-4 py-3 border-t border-gray-700 flex flex-col sm:flex-row items-center justify-between gap-4">
+    <p id="paginationInfo" class="text-sm text-gray-400">Showing 1-<%= Math.min(galleryItemCount, 18) %> of <%= galleryItemCount %> items</p>
+    <div id="paginationControls" class="flex items-center gap-2"></div>
+  </div>
+  <% } %>
+</div>
+</div>
+
+<div id="uploadModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden modal-overlay overflow-y-auto">
+  <div class="flex min-h-screen items-center justify-center p-4">
+    <div class="bg-dark-800 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-700" id="uploadModalContent">
+      <div class="flex items-center justify-between p-4 border-b border-gray-700">
+        <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+          <i class="ti ti-cloud-upload text-primary text-xl"></i> Upload Media Files
+        </h3>
+        <button onclick="closeUploadModal()" class="text-gray-400 hover:text-white transition-colors">
+          <i class="ti ti-x text-xl"></i>
+        </button>
+      </div>
+      <div class="p-6">
+        <form id="videoUploadForm" enctype="multipart/form-data">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input type="hidden" name="uploadType" id="uploadType" value="media">
+          <input type="hidden" name="folderId" id="uploadFolderId" value="<%= currentFolderId || '' %>">
+          
+          <!-- Unified Drag & Drop Zone -->
+          <div id="uploadDropzone" class="border-2 border-dashed border-gray-600 hover:border-primary rounded-xl py-10 px-6 text-center transition-all cursor-pointer bg-dark-900/40 hover:bg-primary/5">
+            <div class="flex flex-col items-center justify-center space-y-3">
+              <div class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-1">
+                <i id="dropzoneIcon" class="ti ti-cloud-upload text-3xl text-primary"></i>
+              </div>
+              <div>
+                <p id="dropzoneText" class="text-white font-medium text-base mb-1">Drag & drop files here</p>
+                <p class="text-gray-400 text-xs">Supports Video, Audio & Image files</p>
+              </div>
+              <label class="bg-primary hover:bg-blue-600 text-white px-5 py-2 rounded-lg transition-colors inline-flex items-center gap-2 cursor-pointer font-medium text-sm shadow-md">
+                <i class="ti ti-folder-open"></i>
+                <span>Browse Files</span>
+                <input type="file" name="media" accept="video/*,audio/*,image/*" multiple class="hidden" id="mediaFileInput">
+              </label>
+              <p id="dropzoneFormats" class="text-gray-500 text-xs mt-1">MP4, MOV, AVI, MP3, WAV, AAC, JPG, PNG, WEBP</p>
+            </div>
+          </div>
+
+          <!-- Selected File Info & Multi-file List -->
+          <div id="selectedFileInfo" class="hidden mt-4">
+            <div class="bg-dark-900/80 p-4 rounded-xl border border-gray-700/60">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 rounded-lg bg-primary/20 flex items-center justify-center">
+                    <i class="ti ti-files text-primary text-lg"></i>
+                  </div>
+                  <div>
+                    <p class="font-medium text-sm text-white">Selected Files</p>
+                    <p id="selectedFileCount" class="text-xs text-gray-400"></p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <button type="button" class="text-primary hover:text-blue-400 text-xs font-semibold flex items-center gap-1" onclick="document.getElementById('mediaFileInput').click()">
+                    <i class="ti ti-plus"></i> Add more
+                  </button>
+                  <button type="button" id="clearFileButton" class="text-gray-400 hover:text-red-400 transition-colors p-1">
+                    <i class="ti ti-trash text-sm"></i>
+                  </button>
+                </div>
+              </div>
+              <div id="selectedFilesList" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
+            </div>
+          </div>
+
+          <!-- Upload Progress Bar -->
+          <div class="mt-4 hidden" id="uploadProgress">
+            <div class="flex justify-between items-center text-sm mb-2">
+              <span id="uploadProgressStatus" class="text-gray-300 truncate mr-2 font-medium">Uploading...</span>
+              <span id="uploadProgressPercent" class="text-primary font-bold">0%</span>
+            </div>
+            <div class="w-full bg-dark-700 rounded-full h-2.5 overflow-hidden">
+              <div id="uploadProgressBar" class="bg-primary h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <div id="uploadFilesList" class="mt-3 space-y-2 max-h-48 overflow-y-auto"></div>
+          </div>
+        </form>
+      </div>
+
+      <div class="flex justify-end gap-3 p-4 border-t border-gray-700/80 bg-dark-800/80">
+        <button onclick="closeUploadModal()" class="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg text-sm transition-colors font-medium">Cancel</button>
+        <button id="uploadButton" class="px-5 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-sm transition-colors font-medium disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed shadow-md flex items-center gap-2" disabled>
+          <i class="ti ti-upload"></i> Start Upload
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- YouTube Import Modal -->
+<div id="youtubeImportModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden modal-overlay overflow-y-auto">
+  <div class="flex min-h-full items-center justify-center p-4">
+    <div class="bg-dark-800 rounded-xl shadow-2xl w-full max-w-lg border border-gray-700/80 overflow-hidden transform transition-all">
+      <div class="flex items-center justify-between p-4 border-b border-gray-700/80 bg-dark-900/50">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center text-red-500">
+            <i class="ti ti-brand-youtube text-xl"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-semibold text-white">Import YouTube Video</h3>
+            <p class="text-xs text-gray-400">Dynamic resolution selection up to 2K/4K</p>
+          </div>
+        </div>
+        <button onclick="closeYoutubeImportModal()" class="text-gray-400 hover:text-white p-1 rounded-lg transition-colors">
+          <i class="ti ti-x text-lg"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1.5">YouTube Video URL</label>
+          <input type="url" id="youtubeUrlInput" placeholder="https://www.youtube.com/watch?v=..." 
+                 class="w-full bg-dark-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors">
+          <div id="youtubeAutoFetchStatus"></div>
+        </div>
+
+        <div id="youtubeVideoInfoContainer" class="hidden bg-dark-900/60 rounded-xl p-3.5 border border-gray-700/60 space-y-3">
+          <div class="flex gap-3 items-center">
+            <img id="youtubePreviewThumb" src="/images/default-thumbnail.jpg" alt="Thumbnail" class="w-24 h-14 object-cover rounded-lg flex-shrink-0 bg-dark-800 border border-gray-700">
+            <div class="min-w-0 flex-1">
+              <h4 id="youtubePreviewTitle" class="text-xs font-semibold text-white truncate mb-1"></h4>
+              <p class="text-[11px] text-gray-400 flex items-center gap-1">
+                <i class="ti ti-clock text-gray-400"></i> Durasi: <span id="youtubePreviewDuration" class="text-gray-200 font-medium">00:00</span>
+              </p>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-300 mb-1">Target Resolution</label>
+            <select id="youtubeResolutionSelect" class="w-full bg-dark-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-red-500">
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2.5 p-4 border-t border-gray-700/80 bg-dark-900/40">
+        <button type="button" onclick="closeYoutubeImportModal()" class="px-4 py-2 text-xs font-medium text-gray-300 hover:text-white bg-dark-700 hover:bg-dark-600 rounded-lg transition-colors">
+          Cancel
+        </button>
+        <button type="button" id="startYoutubeImportBtn" onclick="startYoutubeImport()" disabled 
+                class="px-4 py-2 text-xs font-medium text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-1.5 shadow-md">
+          <i class="ti ti-download text-sm"></i> Start Download
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div id="cloudImportModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden modal-overlay overflow-y-auto">
+  <div class="flex min-h-screen items-center justify-center p-4">
+    <div id="cloudModalContent" class="bg-dark-800 rounded-lg shadow-xl w-full max-w-md">
+      <div class="flex items-center justify-between p-4 border-b border-gray-700">
+        <h3 id="cloudModalTitle" class="text-lg font-semibold">Import from Cloud</h3>
+        <button id="closeCloudBtn" class="text-gray-400 hover:text-white">
+          <i class="ti ti-x text-xl"></i>
+        </button>
+      </div>
+      <div id="cloudModalBody"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="fixed top-16 right-4 bg-dark-800 text-white px-4 py-3 rounded-lg shadow-lg z-50 hidden flex items-center">
+  <i id="toast-icon" class="mr-2"></i>
+  <span id="toast-message"></span>
+</div>
+
+
+<script>
+let currentView = 'grid';
+let currentUploadType = 'video';
+let userDiskUsage = 0;
+let userDiskLimit = 0;
+const currentFolderId = <%- JSON.stringify(currentFolderId || '') %>;
+let galleryVideosState = <%- JSON.stringify(videos || []) %>;
+let galleryFoldersState = <%- JSON.stringify(folders || []) %>;
+let galleryCurrentFolderState = <%- JSON.stringify(currentFolder || null) %>;
+
+async function loadDiskUsage() {
+  try {
+    const response = await fetch('/api/user/disk-usage');
+    const data = await response.json();
+    if (data.success) {
+      userDiskUsage = data.diskUsage;
+      userDiskLimit = data.diskLimit;
+      updateDiskUsageDisplay();
+    }
+  } catch (error) {
+    console.error('Error loading disk usage:', error);
+  }
+}
+
+function updateDiskUsageDisplay() {
+  const infoDesktop = document.getElementById('diskUsageInfoDesktop');
+  const textDesktop = document.getElementById('diskUsageTextDesktop');
+  const infoMobile = document.getElementById('diskUsageInfoMobile');
+  const textMobile = document.getElementById('diskUsageTextMobile');
+  
+  if (userDiskLimit > 0) {
+    const usedText = formatFileSize(userDiskUsage);
+    const limitText = formatFileSize(userDiskLimit);
+    const displayText = `${usedText} / ${limitText}`;
+    
+    textDesktop.textContent = displayText;
+    textMobile.textContent = displayText;
+    
+    const isMobile = window.innerWidth < 768;
+    if (isMobile) {
+      infoDesktop.classList.add('hidden');
+      infoMobile.classList.remove('hidden');
+    } else {
+      infoDesktop.classList.remove('hidden');
+      infoMobile.classList.add('hidden');
+    }
+  } else {
+    infoDesktop.classList.add('hidden');
+    infoMobile.classList.add('hidden');
+  }
+}
+
+window.addEventListener('resize', updateDiskUsageDisplay);
+
+function checkDiskLimit(fileSize) {
+  if (userDiskLimit === 0) return true;
+  return (userDiskUsage + fileSize) <= userDiskLimit;
+}
+
+function getRemainingSpace() {
+  if (userDiskLimit === 0) return Infinity;
+  return Math.max(0, userDiskLimit - userDiskUsage);
+}
+
+loadDiskUsage();
+
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function formatDuration(seconds) {
+  if (!seconds) return '0:00';
+  const totalSeconds = Math.floor(Number(seconds) || 0);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+  return `${minutes}:${String(secs).padStart(2, '0')}`;
+}
+
+function switchUploadTab(type) {
+  currentUploadType = type;
+  const ut = document.getElementById('uploadType'); if(ut) ut.value = type;
+  const tabVideo = document.getElementById('tabVideo');
+  const tabAudio = document.getElementById('tabAudio');
+  const dropzoneIcon = document.getElementById('dropzoneIcon');
+  const dropzoneText = document.getElementById('dropzoneText');
+  const dropzoneFormats = document.getElementById('dropzoneFormats');
+  const mediaFileInput = document.getElementById('mediaFileInput');
+  
+  if (type === 'video') {
+    tabVideo.className = 'flex-1 py-2 px-4 rounded-lg bg-primary text-white transition-colors';
+    tabAudio.className = 'flex-1 py-2 px-4 rounded-lg bg-dark-700 text-gray-400 hover:text-white transition-colors';
+    dropzoneIcon.className = 'ti ti-video text-2xl text-gray-400';
+    dropzoneText.textContent = 'Drag and drop video files here';
+    dropzoneFormats.textContent = 'Supported formats: MP4, AVI, MOV (max 50GB)';
+    mediaFileInput.accept = 'video/mp4,video/avi,video/quicktime';
+  } else {
+    tabVideo.className = 'flex-1 py-2 px-4 rounded-lg bg-dark-700 text-gray-400 hover:text-white transition-colors';
+    tabAudio.className = 'flex-1 py-2 px-4 rounded-lg bg-primary text-white transition-colors';
+    dropzoneIcon.className = 'ti ti-music text-2xl text-gray-400';
+    dropzoneText.textContent = 'Drag and drop audio files here';
+    dropzoneFormats.textContent = 'Supported formats: MP3, WAV';
+    mediaFileInput.accept = 'audio/mpeg,audio/mp3,audio/wav,audio/aac,audio/mp4,audio/x-m4a,audio/ogg,audio/flac';
+  }
+  resetUploadForm();
+}
+
+function showToast(type, message) {
+  const toast = document.getElementById('toast');
+  const toastIcon = document.getElementById('toast-icon');
+  const toastMessage = document.getElementById('toast-message');
+  if (type === 'success') {
+    toastIcon.className = 'ti ti-check text-green-400 text-xl mr-2 font-loaded';
+    toast.classList.add('border-l-4', 'border-green-400');
+    toast.classList.remove('border-l-4', 'border-red-400', 'border-yellow-400');
+  } else if (type === 'error') {
+    toastIcon.className = 'ti ti-x text-red-400 text-xl mr-2 font-loaded';
+    toast.classList.add('border-l-4', 'border-red-400');
+    toast.classList.remove('border-l-4', 'border-green-400', 'border-yellow-400');
+  } else if (type === 'warning') {
+    toastIcon.className = 'ti ti-alert-triangle text-yellow-400 text-xl mr-2 font-loaded';
+    toast.classList.add('border-l-4', 'border-yellow-400');
+    toast.classList.remove('border-l-4', 'border-green-400', 'border-red-400');
+  }
+  toastMessage.textContent = message;
+  toast.classList.remove('hidden');
+  setTimeout(() => toast.classList.add('hidden'), 3000);
+}
+
+function applyGalleryViewMode() {
+  const gridView = document.getElementById('gridView');
+  const listView = document.getElementById('listView');
+  const gridViewBtn = document.getElementById('gridViewBtn');
+  const listViewBtn = document.getElementById('listViewBtn');
+
+  if (gridView && listView) {
+    gridView.classList.toggle('hidden', currentView !== 'grid');
+    listView.classList.toggle('hidden', currentView !== 'list');
+  }
+
+  if (gridViewBtn && listViewBtn) {
+    gridViewBtn.classList.toggle('bg-primary', currentView === 'grid');
+    gridViewBtn.classList.toggle('text-white', currentView === 'grid');
+    gridViewBtn.classList.toggle('text-gray-400', currentView !== 'grid');
+    listViewBtn.classList.toggle('bg-primary', currentView === 'list');
+    listViewBtn.classList.toggle('text-white', currentView === 'list');
+    listViewBtn.classList.toggle('text-gray-400', currentView !== 'list');
+  }
+}
+
+function initializeGalleryViewButtons() {
+  const gridViewBtn = document.getElementById('gridViewBtn');
+  const listViewBtn = document.getElementById('listViewBtn');
+  if (gridViewBtn) {
+    gridViewBtn.onclick = function() {
+      currentView = 'grid';
+      applyGalleryViewMode();
+    };
+  }
+  if (listViewBtn) {
+    listViewBtn.onclick = function() {
+      currentView = 'list';
+      applyGalleryViewMode();
+    };
+  }
+  applyGalleryViewMode();
+}
+
+function playMedia(mediaId, mediaTitle, mediaType) {
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4';
+  modal.id = 'media-player-modal';
+  
+  if (mediaType === 'audio') {
+    modal.innerHTML = `
+      <div class="relative w-full max-w-lg mx-auto">
+        <div class="bg-dark-800 rounded-lg overflow-hidden shadow-xl">
+          <div class="flex items-center justify-between p-4 border-b border-gray-700">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                <i class="ti ti-music text-primary"></i>
+              </div>
+              <h3 class="text-lg font-medium truncate pr-4">${mediaTitle || 'Now Playing'}</h3>
+            </div>
+            <button id="close-player-btn" class="text-gray-400 hover:text-white">
+              <i class="ti ti-x text-xl"></i>
+            </button>
+          </div>
+          <div class="p-6">
+            <audio id="audio-player" class="w-full" controls autoplay>
+              <source src="/stream/${mediaId}" type="audio/mp4">
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    modal.innerHTML = `
+      <div class="relative w-full max-w-4xl mx-auto">
+        <div class="bg-dark-800 rounded-lg overflow-hidden shadow-xl">
+          <div class="flex items-center justify-between p-4 border-b border-gray-700">
+            <h3 class="text-lg font-medium truncate pr-4">${mediaTitle || 'Now Playing'}</h3>
+            <button id="close-player-btn" class="text-gray-400 hover:text-white">
+              <i class="ti ti-x text-xl"></i>
+            </button>
+          </div>
+          <div class="bg-black aspect-video">
+            <video id="native-player" class="w-full h-full" controls preload="auto" autoplay>
+              <source src="/stream/${mediaId}" type="video/mp4">
+            </video>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  document.body.appendChild(modal);
+  document.body.classList.add('overflow-hidden');
+  
+  const closePlayer = () => {
+    const video = document.getElementById('native-player');
+    const audio = document.getElementById('audio-player');
+    if (video) video.pause();
+    if (audio) audio.pause();
+    modal.remove();
+    document.body.classList.remove('overflow-hidden');
+  };
+  
+  document.getElementById('close-player-btn').addEventListener('click', closePlayer);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closePlayer(); });
+  document.addEventListener('keydown', function handler(e) {
+    if (e.key === 'Escape') { closePlayer(); document.removeEventListener('keydown', handler); }
+  });
+}
+
+async function showRenameDialog(videoId, currentTitle) {
+  const result = await createModalDialog({
+    type: 'info',
+    icon: 'ti-pencil',
+    title: 'Rename Video',
+    message: 'Enter a new title for your video:',
+    hasInput: true,
+    inputValue: currentTitle,
+    confirmText: 'Save'
+  });
+  if (result.confirmed && result.value && result.value !== currentTitle) {
+    try {
+      const response = await fetch(`/api/videos/${videoId}/rename`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: result.value })
+      });
+      const data = await response.json();
+      if (data.success) {
+        showToast('success', 'Video renamed successfully');
+        await window.refreshGalleryData?.();
+      } else {
+        showToast('error', data.error || 'Failed to rename video');
+      }
+    } catch (error) {
+      showToast('error', 'An error occurred while renaming the video');
+    }
+  }
+}
+
+async function showDeleteDialog(videoId, videoTitle) {
+  const result = await createModalDialog({
+    type: 'danger',
+    icon: 'ti-trash',
+    title: 'Delete Video',
+    message: `Are you sure you want to delete "${videoTitle}"? This action cannot be undone.`,
+    confirmText: 'Delete',
+    confirmClass: 'bg-red-500 hover:bg-red-600'
+  });
+  if (result.confirmed) {
+    try {
+      const response = await fetch(`/api/videos/${videoId}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (data.success) {
+        showToast('success', 'Video deleted successfully');
+        await window.refreshGalleryData?.();
+      } else {
+        showToast('error', data.error || 'Failed to delete video');
+      }
+    } catch (error) {
+      showToast('error', 'An error occurred while deleting the video');
+    }
+  }
+}
+
+async function openCreateFolderDialog() {
+  const result = await createModalDialog({
+    type: 'info',
+    icon: 'ti-folder-plus',
+    title: 'Create Folder',
+    message: 'Enter a name for the new folder:',
+    hasInput: true,
+    confirmText: 'Create'
+  });
+
+  if (!result.confirmed || !result.value) {
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/media-folders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': document.querySelector('input[name="_csrf"]')?.value || ''
+      },
+      body: JSON.stringify({ name: result.value.trim() })
+    });
+    const data = await response.json();
+    if (data.success) {
+      showToast('success', 'Folder created successfully');
+      await window.refreshGalleryData?.();
+    } else {
+      showToast('error', data.error || 'Failed to create folder');
+    }
+  } catch (error) {
+    showToast('error', 'An error occurred while creating the folder');
+  }
+}
+
+async function showRenameFolderDialog(folderId, currentName) {
+  const result = await createModalDialog({
+    type: 'info',
+    icon: 'ti-pencil',
+    title: 'Rename Folder',
+    message: 'Enter a new name for this folder:',
+    hasInput: true,
+    inputValue: currentName,
+    confirmText: 'Save'
+  });
+
+  if (!result.confirmed || !result.value || result.value === currentName) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/media-folders/${folderId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': document.querySelector('input[name="_csrf"]')?.value || ''
+      },
+      body: JSON.stringify({ name: result.value.trim() })
+    });
+    const data = await response.json();
+    if (data.success) {
+      showToast('success', 'Folder renamed successfully');
+      await window.refreshGalleryData?.();
+    } else {
+      showToast('error', data.error || 'Failed to rename folder');
+    }
+  } catch (error) {
+    showToast('error', 'An error occurred while renaming the folder');
+  }
+}
+
+async function showDeleteFolderDialog(folderId, folderName) {
+  const result = await createModalDialog({
+    type: 'danger',
+    icon: 'ti-trash',
+    title: 'Delete Folder',
+    message: `Delete "${folderName}"? All files inside this folder will also be deleted.`,
+    confirmText: 'Delete',
+    confirmClass: 'bg-red-500 hover:bg-red-600'
+  });
+
+  if (!result.confirmed) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/media-folders/${folderId}`, {
+      method: 'DELETE',
+      headers: {
+        'X-CSRF-Token': document.querySelector('input[name="_csrf"]')?.value || ''
+      }
+    });
+    const data = await response.json();
+    if (data.success) {
+      showToast('success', 'Folder deleted successfully');
+      await window.refreshGalleryData?.();
+    } else {
+      showToast('error', data.error || 'Failed to delete folder');
+    }
+  } catch (error) {
+    showToast('error', 'An error occurred while deleting the folder');
+  }
+}
+
+async function moveVideoToFolder(videoId, folderId) {
+  try {
+    const response = await fetch(`/api/videos/${videoId}/folder`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': document.querySelector('input[name="_csrf"]')?.value || ''
+      },
+      body: JSON.stringify({ folderId: folderId || null })
+    });
+    const data = await response.json();
+    if (data.success) {
+      showToast('success', folderId ? 'File moved to folder' : 'File moved to root');
+      await window.refreshGalleryData?.();
+    } else {
+      showToast('error', data.error || 'Failed to move file');
+    }
+  } catch (error) {
+    showToast('error', 'An error occurred while moving the file');
+  }
+}
+
+function createModalDialog(options) {
+  const dialog = document.createElement('div');
+  dialog.id = 'custom-modal';
+  dialog.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm modal-overlay';
+  const themes = {
+    'info': { icon: options.icon || 'ti-info-circle', color: 'text-primary', bg: 'bg-primary/10', button: 'bg-primary hover:bg-blue-600' },
+    'danger': { icon: options.icon || 'ti-alert-triangle', color: 'text-red-400', bg: 'bg-red-500/10', button: 'bg-red-500 hover:bg-red-600' }
+  };
+  const theme = themes[options.type || 'info'];
+  dialog.innerHTML = `
+    <div class="max-w-md w-full mx-4">
+      <div class="bg-dark-800 rounded-lg shadow-xl overflow-hidden">
+        <div class="p-6">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-full ${theme.bg} flex items-center justify-center shrink-0">
+              <i class="ti ${theme.icon} ${theme.color} text-2xl"></i>
+            </div>
+            <div class="flex-1">
+              <h3 class="text-lg font-semibold">${options.title}</h3>
+              <p class="text-gray-400 text-sm mt-1">${options.message}</p>
+            </div>
+          </div>
+          ${options.hasInput ? `
+          <input type="text" id="modal-input" class="mt-4 w-full bg-dark-700 border border-gray-600 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary" value="${options.inputValue || ''}" autofocus>
+          ` : ''}
+        </div>
+        <div class="flex justify-end gap-3 p-4 border-t border-gray-700">
+          <button id="modal-cancel-btn" class="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg transition-colors">Cancel</button>
+          <button id="modal-confirm-btn" class="${options.confirmClass || theme.button} px-4 py-2 text-white rounded-lg transition-colors">${options.confirmText || 'Confirm'}</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(dialog);
+  document.body.classList.add('overflow-hidden');
+  
+  return new Promise((resolve) => {
+    const close = (confirmed = false, value = null) => {
+      document.body.classList.remove('overflow-hidden');
+      dialog.remove();
+      resolve({ confirmed, value });
+    };
+    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
+      const value = options.hasInput ? document.getElementById('modal-input').value : null;
+      close(true, value);
+    });
+    document.getElementById('modal-cancel-btn').addEventListener('click', () => close());
+    dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
+    if (options.hasInput) {
+      const input = document.getElementById('modal-input');
+      input.focus();
+      input.select();
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') close(true, input.value); });
+    }
+  });
+}
+
+function openUploadModal() {
+  const modal = document.getElementById('uploadModal');
+  modal.classList.remove('hidden');
+  document.body.classList.add('overflow-hidden');
+  resetUploadForm();
+}
+
+function closeUploadModal() {
+  const modal = document.getElementById('uploadModal');
+  modal.classList.add('hidden');
+  document.body.classList.remove('overflow-hidden');
+  resetUploadForm();
+}
+
+function resetUploadForm() {
+  document.getElementById('videoUploadForm').reset();
+  document.getElementById('selectedFileInfo').classList.add('hidden');
+  document.getElementById('uploadDropzone').classList.remove('hidden');
+  document.getElementById('uploadProgress').classList.add('hidden');
+  document.getElementById('uploadButton').disabled = true;
+  document.getElementById('uploadProgressBar').style.width = '0%';
+  const ut = document.getElementById('uploadType'); if(ut) ut.value = currentUploadType;
+  document.getElementById('uploadFolderId').value = currentFolderId;
+  selectedFiles = [];
+}
+
+let currentCloudType = '';
+
+function toggleCloudDropdown() {
+  const dropdown = document.getElementById('cloudDropdown');
+  dropdown.classList.toggle('hidden');
+}
+
+document.addEventListener('click', function(e) {
+  const dropdown = document.getElementById('cloudDropdown');
+  const button = e.target.closest('button[onclick="toggleCloudDropdown()"]');
+  if (!button && !e.target.closest('#cloudDropdown')) {
+    dropdown.classList.add('hidden');
+  }
+});
+
+function openCloudModal(type) {
+  currentCloudType = type;
+  document.getElementById('cloudDropdown').classList.add('hidden');
+  const modal = document.getElementById('cloudImportModal');
+  modal.classList.remove('hidden');
+  document.body.classList.add('overflow-hidden');
+  initCloudModal(type);
+}
+
+function closeCloudModal() {
+  const modal = document.getElementById('cloudImportModal');
+  modal.classList.add('hidden');
+  document.body.classList.remove('overflow-hidden');
+}
+
+function openGDriveModal() {
+  openCloudModal('gdrive');
+}
+
+function closeGDriveModal() {
+  closeCloudModal();
+}
+
+function initCloudModal(type) {
+  const configs = {
+    gdrive: {
+      title: 'Import from Google Drive',
+      icon: '/images/google drive.png',
+      placeholder: 'https://drive.google.com/file/d/...',
+      hint: 'Make sure the file is shared with "Anyone with the link"',
+      endpoint: '/api/videos/import-drive',
+      urlField: 'driveUrl'
+    },
+    mediafire: {
+      title: 'Import from Mediafire',
+      icon: '/images/mediafire.png',
+      placeholder: 'https://www.mediafire.com/file/...',
+      hint: 'Paste the Mediafire file link',
+      endpoint: '/api/videos/import-mediafire',
+      urlField: 'mediafireUrl'
+    },
+    dropbox: {
+      title: 'Import from Dropbox',
+      icon: '/images/dropbox.png',
+      placeholder: 'https://www.dropbox.com/...',
+      hint: 'Make sure the file is publicly accessible',
+      endpoint: '/api/videos/import-dropbox',
+      urlField: 'dropboxUrl'
+    },
+    mega: {
+      title: 'Import from MEGA',
+      icon: '/images/mega.png',
+      placeholder: 'https://mega.nz/file/...',
+      hint: 'Paste the MEGA file link (public files only)',
+      endpoint: '/api/videos/import-mega',
+      urlField: 'megaUrl'
+    }
+  };
+  
+  const config = configs[type];
+  document.getElementById('cloudModalTitle').textContent = config.title;
+  
+  document.getElementById('cloudModalBody').innerHTML = `
+    <div class="p-6">
+      <div class="text-center mb-6">
+        <div class="w-16 h-16 rounded-full bg-dark-700 flex items-center justify-center mx-auto mb-3">
+          <img src="${config.icon}" alt="${config.title}" class="w-10 h-10">
+        </div>
+        <p class="text-gray-400 text-sm">Paste a link to your video</p>
+      </div>
+      <div class="relative mb-3">
+        <input type="text" id="cloud-link" class="w-full bg-dark-700 border border-gray-600 text-white pl-10 pr-4 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary" placeholder="${config.placeholder}">
+        <i class="ti ti-link absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+      </div>
+      <p class="text-xs text-gray-500 mb-4">${config.hint}</p>
+      <button id="import-cloud-button" class="w-full bg-primary hover:bg-blue-600 text-white py-2 rounded-lg transition-colors flex items-center justify-center">
+        <i class="ti ti-download mr-2"></i>
+        Import Video
+      </button>
+    </div>
+  `;
+  
+  document.getElementById('closeCloudBtn').addEventListener('click', closeCloudModal);
+  document.getElementById('import-cloud-button').addEventListener('click', async function() {
+    const link = document.getElementById('cloud-link').value;
+    if (!link) { showToast('error', 'Please enter a link'); return; }
+    this.disabled = true;
+    this.innerHTML = '<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+    try {
+      const body = {};
+      body[config.urlField] = link;
+      body.folderId = currentFolderId || '';
+      const response = await fetch(config.endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': document.querySelector('input[name="_csrf"]').value },
+        body: JSON.stringify(body)
+      });
+      const result = await response.json();
+      if (result.success) {
+        showImportProgress(result.jobId);
+        closeCloudModal();
+      } else {
+        showToast('error', result.error || 'Failed to import video');
+        this.disabled = false;
+        this.innerHTML = '<i class="ti ti-download mr-2"></i>Import Video';
+      }
+    } catch (error) {
+      showToast('error', 'An error occurred while importing the video');
+      this.disabled = false;
+      this.innerHTML = '<i class="ti ti-download mr-2"></i>Import Video';
+    }
+  });
+}
+
+function showImportProgress(jobId) {
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm modal-overlay';
+  modal.id = 'import-progress-modal';
+  modal.innerHTML = `
+    <div class="bg-dark-800 rounded-lg p-6 w-full max-w-sm mx-4">
+      <div class="text-center">
+        <div class="w-16 h-16 mb-4 rounded-full bg-primary/10 mx-auto flex items-center justify-center">
+          <i id="progress-icon" class="ti ti-download text-primary text-2xl"></i>
+        </div>
+        <p id="progress-status" class="text-sm text-gray-300 mb-4">Starting download...</p>
+        <div class="w-full bg-dark-700 rounded-full h-2.5 mb-4">
+          <div id="progress-bar" class="bg-primary h-2.5 rounded-full transition-all" style="width: 0%"></div>
+        </div>
+        <button onclick="document.getElementById('import-progress-modal').remove()" class="text-sm text-gray-500 hover:text-white">Close</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  
+  const interval = setInterval(async () => {
+    try {
+      const response = await fetch(`/api/videos/import-status/${jobId}`);
+      const data = await response.json();
+      if (!data.success) { clearInterval(interval); return; }
+      const status = data.status;
+      document.getElementById('progress-bar').style.width = `${status.progress}%`;
+      document.getElementById('progress-status').textContent = status.message;
+      if (status.status === 'complete') {
+        document.getElementById('progress-icon').className = 'ti ti-check text-green-400 text-2xl';
+        showToast('success', 'Video imported successfully');
+        await window.refreshGalleryData?.();
+        clearInterval(interval);
+      } else if (status.status === 'failed') {
+        document.getElementById('progress-icon').className = 'ti ti-x text-red-400 text-2xl';
+        showToast('error', status.message || 'Import failed');
+        clearInterval(interval);
+      }
+    } catch (e) { console.error(e); }
+  }, 1000);
+}
+
+
+let selectedFiles = [];
+const CHUNK_SIZE = 50 * 1024 * 1024;
+
+function isAudioFile(file) {
+  const audioTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/ogg', 'audio/flac', 'audio/x-flac'];
+  const audioExts = ['.mp3', '.wav', '.aac', '.m4a', '.ogg', '.flac'];
+  const ext = '.' + file.name.split('.').pop().toLowerCase();
+  return audioTypes.includes(file.type) || audioExts.includes(ext);
+}
+
+function isVideoFile(file) {
+  const videoTypes = ['video/mp4', 'video/avi', 'video/quicktime', 'video/x-msvideo'];
+  const videoExts = ['.mp4', '.avi', '.mov'];
+  const ext = '.' + file.name.split('.').pop().toLowerCase();
+  return videoTypes.includes(file.type) || videoExts.includes(ext);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const mediaFileInput = document.getElementById('mediaFileInput');
+  const selectedFileInfo = document.getElementById('selectedFileInfo');
+  const selectedFileCount = document.getElementById('selectedFileCount');
+  const selectedFilesList = document.getElementById('selectedFilesList');
+  const clearFileButton = document.getElementById('clearFileButton');
+  const uploadDropzone = document.getElementById('uploadDropzone');
+  const uploadButton = document.getElementById('uploadButton');
+  const uploadProgress = document.getElementById('uploadProgress');
+  const uploadProgressBar = document.getElementById('uploadProgressBar');
+  const uploadProgressPercent = document.getElementById('uploadProgressPercent');
+  const uploadProgressStatus = document.getElementById('uploadProgressStatus');
+  const uploadFilesList = document.getElementById('uploadFilesList');
+  const searchInput = document.getElementById('searchInput');
+  const sortSelect = document.getElementById('sortSelect');
+
+  if (mediaFileInput) {
+    mediaFileInput.addEventListener('change', function() {
+      const newFiles = Array.from(this.files);
+      if (newFiles.length > 0) {
+        const maxSize = 50 * 1024 * 1024 * 1024;
+        const large = newFiles.filter(f => f.size > maxSize);
+        if (large.length > 0) {
+          showToast('error', `File too large: ${large.map(f => f.name).join(', ')}`);
+          this.value = '';
+          return;
+        }
+        const totalNewSize = newFiles.reduce((sum, f) => sum + f.size, 0);
+        const totalSelectedSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+        if (userDiskLimit > 0 && (userDiskUsage + totalSelectedSize + totalNewSize) > userDiskLimit) {
+          const remaining = getRemainingSpace() - totalSelectedSize;
+          showToast('error', `Disk limit exceeded. Remaining space: ${formatFileSize(Math.max(0, remaining))}`);
+          this.value = '';
+          return;
+        }
+        newFiles.forEach(f => {
+          if (!selectedFiles.some(e => e.name === f.name && e.size === f.size)) selectedFiles.push(f);
+        });
+        updateFilesList();
+        uploadDropzone.classList.add('hidden');
+        selectedFileInfo.classList.remove('hidden');
+        uploadButton.disabled = false;
+      }
+      this.value = '';
+    });
+  }
+
+  function updateFilesList() {
+    const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+    selectedFileCount.textContent = `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} selected (${formatFileSize(totalSize)})`;
+    selectedFilesList.innerHTML = '';
+    selectedFiles.forEach((file, i) => {
+      const isAudio = isAudioFile(file);
+      const icon = isAudio ? 'ti-music' : 'ti-video';
+      const div = document.createElement('div');
+      div.className = 'flex items-center justify-between p-2 rounded-lg hover:bg-dark-600 transition-colors';
+      div.innerHTML = `
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-8 h-8 rounded bg-dark-600 flex items-center justify-center shrink-0">
+            <i class="ti ${icon} text-gray-400 text-sm"></i>
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm truncate">${file.name}</p>
+            <p class="text-xs text-gray-500">${formatFileSize(file.size)}</p>
+          </div>
+        </div>
+        <button type="button" class="text-gray-400 hover:text-red-400 p-1" data-index="${i}">
+          <i class="ti ti-x text-sm"></i>
+        </button>
+      `;
+      div.querySelector('button').addEventListener('click', () => {
+        selectedFiles.splice(i, 1);
+        if (selectedFiles.length > 0) updateFilesList();
+        else resetUploadForm();
+      });
+      selectedFilesList.appendChild(div);
+    });
+  }
+
+  if (clearFileButton) clearFileButton.addEventListener('click', resetUploadForm);
+
+  if (uploadButton) {
+    uploadButton.addEventListener('click', async function() {
+      if (selectedFiles.length === 0) return;
+      uploadDropzone.classList.add('hidden');
+      selectedFileInfo.classList.add('hidden');
+      uploadProgress.classList.remove('hidden');
+      uploadButton.disabled = true;
+      
+      let success = 0, failed = [];
+      uploadFilesList.innerHTML = '';
+      selectedFiles.forEach((f) => {
+        const isAudio = isAudioFile(f);
+        const icon = isAudio ? 'ti-music' : 'ti-video';
+        const div = document.createElement('div');
+        div.className = 'flex items-center justify-between p-2 rounded-lg';
+        div.innerHTML = `
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-8 h-8 rounded bg-dark-600 flex items-center justify-center shrink-0">
+              <i class="ti ${icon} text-gray-400 text-sm"></i>
+            </div>
+            <span class="text-sm truncate">${f.name}</span>
+          </div>
+          <span class="file-status text-xs text-gray-500">Waiting</span>
+        `;
+        uploadFilesList.appendChild(div);
+      });
+
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        const isAudio = isAudioFile(file);
+        uploadProgressStatus.textContent = `Uploading ${i + 1}/${selectedFiles.length}: ${file.name}`;
+        updateFileProgress(i, 'uploading', 0);
+        
+        let result;
+        if (isAudio) {
+          result = await uploadAudioSimple(file, i, selectedFiles.length);
+        } else {
+          const useChunked = file.size > 50 * 1024 * 1024;
+          result = useChunked ? await uploadChunked(file, i, selectedFiles.length) : await uploadSimple(file, i, selectedFiles.length);
+        }
+        
+        if (result.success) { success++; updateFileProgress(i, 'success', 100); }
+        else { failed.push(file.name); updateFileProgress(i, 'error', 0); }
+      }
+
+      if (failed.length === 0) showToast('success', `${success} file${success > 1 ? 's' : ''} uploaded successfully`);
+      else showToast('warning', `${success} uploaded, ${failed.length} failed`);
+      await window.refreshGalleryData?.();
+      closeUploadModal();
+      loadDiskUsage();
+    });
+  }
+
+  function updateFileProgress(index, status, percent) {
+    const items = uploadFilesList.children;
+    if (items[index]) {
+      const el = items[index].querySelector('.file-status');
+      if (status === 'uploading') { el.textContent = `${percent}%`; el.className = 'file-status text-xs text-primary'; }
+      else if (status === 'success') { el.textContent = '✓'; el.className = 'file-status text-xs text-green-400'; }
+      else if (status === 'error') { el.textContent = '✗'; el.className = 'file-status text-xs text-red-400'; }
+    }
+  }
+
+  async function uploadSimple(file, index, total) {
+    return new Promise((resolve) => {
+      const formData = new FormData();
+      formData.append('video', file);
+      formData.append('folderId', document.getElementById('uploadFolderId').value || '');
+      const xhr = new XMLHttpRequest();
+      xhr.timeout = 30 * 60 * 1000;
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          const overall = Math.round(((index + e.loaded / e.total) / total) * 100);
+          uploadProgressBar.style.width = overall + '%';
+          uploadProgressPercent.textContent = overall + '%';
+          updateFileProgress(index, 'uploading', pct);
+        }
+      });
+      xhr.addEventListener('load', () => {
+        if (xhr.status === 200) {
+          try { const r = JSON.parse(xhr.responseText); resolve({ success: r.success }); }
+          catch { resolve({ success: false }); }
+        } else resolve({ success: false });
+      });
+      xhr.addEventListener('error', () => resolve({ success: false }));
+      xhr.addEventListener('timeout', () => resolve({ success: false }));
+      xhr.open('POST', '/api/videos/upload', true);
+      xhr.send(formData);
+    });
+  }
+
+  async function uploadAudioSimple(file, index, total) {
+    return new Promise((resolve) => {
+      const formData = new FormData();
+      formData.append('audio', file);
+      formData.append('folderId', document.getElementById('uploadFolderId').value || '');
+      const xhr = new XMLHttpRequest();
+      xhr.timeout = 60 * 60 * 1000;
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          const overall = Math.round(((index + e.loaded / e.total) / total) * 100);
+          uploadProgressBar.style.width = overall + '%';
+          uploadProgressPercent.textContent = overall + '%';
+          updateFileProgress(index, 'uploading', pct);
+        }
+      });
+      xhr.addEventListener('load', () => {
+        if (xhr.status === 200) {
+          try { const r = JSON.parse(xhr.responseText); resolve({ success: r.success }); }
+          catch { resolve({ success: false }); }
+        } else resolve({ success: false });
+      });
+      xhr.addEventListener('error', () => resolve({ success: false }));
+      xhr.addEventListener('timeout', () => resolve({ success: false }));
+      xhr.open('POST', '/api/audio/upload', true);
+      xhr.send(formData);
+    });
+  }
+
+  async function uploadChunked(file, index, total) {
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    try {
+      const init = await fetch('/api/videos/chunk/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, fileSize: file.size, totalChunks, folderId: document.getElementById('uploadFolderId').value || '' })
+      });
+      const initData = await init.json();
+      if (!initData.success) throw new Error(initData.error);
+      const uploadId = initData.uploadId;
+      let uploaded = initData.uploadedChunks || [];
+
+      for (let i = 0; i < totalChunks; i++) {
+        if (uploaded.includes(i)) continue;
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+        let retries = 3;
+        while (retries > 0) {
+          try {
+            const res = await fetch('/api/videos/chunk/upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/octet-stream', 'X-Upload-Id': uploadId, 'X-Chunk-Index': i.toString() },
+              body: chunk
+            });
+            const data = await res.json();
+            if (data.success) { uploaded = data.uploadedChunks; break; }
+            throw new Error(data.error);
+          } catch { retries--; if (retries === 0) throw new Error('Upload failed'); await new Promise(r => setTimeout(r, 1000)); }
+        }
+        const bytes = Math.min((i + 1) * CHUNK_SIZE, file.size);
+        const pct = Math.round((bytes / file.size) * 100);
+        const overall = Math.round(((index + bytes / file.size) / total) * 100);
+        uploadProgressBar.style.width = overall + '%';
+        uploadProgressPercent.textContent = overall + '%';
+        updateFileProgress(index, 'uploading', pct);
+      }
+
+      const complete = await fetch('/api/videos/chunk/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uploadId })
+      });
+      const completeData = await complete.json();
+      return { success: completeData.success };
+    } catch (e) {
+      console.error(e);
+      return { success: false };
+    }
+  }
+
+  if (uploadDropzone) {
+    uploadDropzone.addEventListener('click', (e) => {
+      if (!e.target.closest('label')) mediaFileInput.click();
+    });
+    uploadDropzone.addEventListener('dragenter', (e) => { e.preventDefault(); uploadDropzone.classList.add('border-primary', 'bg-primary/5'); });
+    uploadDropzone.addEventListener('dragover', (e) => { e.preventDefault(); });
+    uploadDropzone.addEventListener('dragleave', (e) => { e.preventDefault(); uploadDropzone.classList.remove('border-primary', 'bg-primary/5'); });
+    uploadDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadDropzone.classList.remove('border-primary', 'bg-primary/5');
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        const validFiles = Array.from(files).filter(f => {
+          if (currentUploadType === 'video') return isVideoFile(f);
+          return isAudioFile(f);
+        });
+        if (validFiles.length > 0) {
+          const totalNewSize = validFiles.reduce((sum, f) => sum + f.size, 0);
+          const totalSelectedSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+          if (userDiskLimit > 0 && (userDiskUsage + totalSelectedSize + totalNewSize) > userDiskLimit) {
+            const remaining = getRemainingSpace() - totalSelectedSize;
+            showToast('error', `Disk limit exceeded. Remaining space: ${formatFileSize(Math.max(0, remaining))}`);
+            return;
+          }
+          validFiles.forEach(f => { if (!selectedFiles.some(e => e.name === f.name && e.size === f.size)) selectedFiles.push(f); });
+          updateFilesList();
+          uploadDropzone.classList.add('hidden');
+          selectedFileInfo.classList.remove('hidden');
+          uploadButton.disabled = false;
+        } else {
+          if (currentUploadType === 'video') showToast('error', 'Please upload a valid video file (MP4, AVI, MOV)');
+          else showToast('error', 'Please upload a valid audio file (MP3, WAV, AAC, M4A, OGG, FLAC)');
+        }
+      }
+    });
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function isAudioMediaItem(video) {
+    const filepath = (video.filepath || '').toLowerCase();
+    return filepath.includes('/audio/') || filepath.endsWith('.m4a') || filepath.endsWith('.aac') || filepath.endsWith('.mp3');
+  }
+
+  function formatGalleryDate(value) {
+    if (!value) return '--';
+    return new Date(value).toLocaleDateString();
+  }
+
+  function buildFolderGridMarkup(folder) {
+    return `
+      <a href="/gallery?folder=${encodeURIComponent(folder.id)}" class="gallery-grid-item gallery-folder-link folder-drop-target group bg-dark-700 rounded-lg border border-transparent hover:border-gray-600 hover:bg-dark-600 transition-all p-4 flex flex-col justify-between min-h-[172px]"
+        data-folder-id="${escapeHtml(folder.id)}" data-kind="folder" data-type="folder" data-title="${escapeHtml(folder.name)}" data-date="${escapeHtml(folder.updated_at || folder.created_at || '')}" data-size="0">
+        <div class="flex items-start justify-between gap-3">
+          <div class="w-12 h-12 rounded-xl bg-primary/15 text-primary flex items-center justify-center flex-shrink-0">
+            <i class="ti ti-folder text-3xl"></i>
+          </div>
+          <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button class="folder-rename-btn text-gray-400 hover:text-white p-1" data-folder-id="${escapeHtml(folder.id)}" data-folder-name="${escapeHtml(folder.name)}">
+              <i class="ti ti-pencil text-sm"></i>
+            </button>
+            <button class="folder-delete-btn text-gray-400 hover:text-red-400 p-1" data-folder-id="${escapeHtml(folder.id)}" data-folder-name="${escapeHtml(folder.name)}">
+              <i class="ti ti-trash text-sm"></i>
+            </button>
+          </div>
+        </div>
+        <div class="mt-4 min-w-0">
+          <h3 class="font-medium text-sm text-white truncate">${escapeHtml(folder.name)}</h3>
+          <p class="text-xs text-gray-400 mt-1">${folder.item_count || 0} item${(folder.item_count || 0) === 1 ? '' : 's'}</p>
+        </div>
+      </a>
+    `;
+  }
+
+  function buildVideoGridMarkup(video) {
+    const isAudio = isAudioMediaItem(video);
+    const mediaType = isAudio ? 'audio' : 'video';
+    const thumbnail = escapeHtml(video.thumbnail_path || '/images/default-video-thumbnail.svg');
+    const title = escapeHtml(video.title || '');
+    return `
+      <div class="gallery-grid-item file-item gallery-playable group bg-dark-700 rounded-lg overflow-hidden border border-transparent hover:border-gray-600 hover:bg-dark-600 transition-all cursor-pointer"
+        data-id="${escapeHtml(video.id)}" data-kind="file" data-title="${title}" data-date="${escapeHtml(video.upload_date || video.created_at || '')}" data-size="${Number(video.file_size || 0)}" data-type="${mediaType}"
+        data-media-type="${mediaType}" data-media-title="${title}" draggable="true">
+        <div class="aspect-video relative overflow-hidden bg-dark-900">
+          ${isAudio ? `
+          <div class="w-full h-full flex items-center justify-center bg-[#181818]">
+            <div class="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
+              <i class="ti ti-music text-3xl text-primary"></i>
+            </div>
+          </div>` : `<img src="${thumbnail}" alt="${title}" class="w-full h-full object-cover">`}
+          <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <div class="bg-primary/90 w-10 h-10 rounded-full flex items-center justify-center">
+              <i class="ti ti-player-play-filled text-white"></i>
+            </div>
+          </div>
+          <span class="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">${formatDuration(video.duration)}</span>
+          ${isAudio ? `<span class="absolute top-2 left-2 bg-primary/80 text-white text-xs px-1.5 py-0.5 rounded"><i class="ti ti-music text-xs mr-1"></i>Audio</span>` : ''}
+        </div>
+        <div class="p-3">
+          <h3 class="font-medium text-sm truncate mb-1">${title}</h3>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-gray-400">${formatFileSize(video.file_size || 0)}</span>
+            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button class="file-rename-btn text-gray-400 hover:text-white p-1" data-video-id="${escapeHtml(video.id)}" data-video-title="${title}">
+                <i class="ti ti-pencil text-sm"></i>
+              </button>
+              <button class="file-delete-btn text-gray-400 hover:text-red-400 p-1" data-video-id="${escapeHtml(video.id)}" data-video-title="${title}">
+                <i class="ti ti-trash text-sm"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function buildFolderListMarkup(folder) {
+    return `
+      <tr class="gallery-list-item gallery-folder-link folder-drop-target group hover:bg-dark-700 transition-colors cursor-pointer"
+        data-folder-id="${escapeHtml(folder.id)}" data-kind="folder" data-type="folder" data-title="${escapeHtml(folder.name)}" data-date="${escapeHtml(folder.updated_at || folder.created_at || '')}" data-size="0">
+        <td class="px-4 py-3">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-8 rounded bg-primary/15 text-primary flex-shrink-0 relative flex items-center justify-center">
+              <i class="ti ti-folder text-lg"></i>
+            </div>
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="font-medium text-sm truncate max-w-xs">${escapeHtml(folder.name)}</span>
+            </div>
+          </div>
+        </td>
+        <td class="px-4 py-3 text-sm text-gray-500">--</td>
+        <td class="px-4 py-3 text-sm text-gray-400">${folder.item_count || 0} item${(folder.item_count || 0) === 1 ? '' : 's'}</td>
+        <td class="px-4 py-3 text-sm text-gray-400">${formatGalleryDate(folder.updated_at || folder.created_at)}</td>
+        <td class="px-4 py-3 text-right">
+          <div class="flex items-center justify-end gap-1">
+            <button class="folder-rename-btn p-1.5 hover:bg-dark-600 rounded text-gray-400 hover:text-white transition-colors" data-folder-id="${escapeHtml(folder.id)}" data-folder-name="${escapeHtml(folder.name)}">
+              <i class="ti ti-pencil text-sm"></i>
+            </button>
+            <button class="folder-delete-btn p-1.5 hover:bg-dark-600 rounded text-gray-400 hover:text-red-400 transition-colors" data-folder-id="${escapeHtml(folder.id)}" data-folder-name="${escapeHtml(folder.name)}">
+              <i class="ti ti-trash text-sm"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  function buildVideoListMarkup(video) {
+    const isAudio = isAudioMediaItem(video);
+    const mediaType = isAudio ? 'audio' : 'video';
+    const title = escapeHtml(video.title || '');
+    const thumbnail = escapeHtml(video.thumbnail_path || '/images/default-video-thumbnail.svg');
+    return `
+      <tr class="gallery-list-item file-item-row gallery-playable group hover:bg-dark-700 transition-colors cursor-pointer"
+        data-id="${escapeHtml(video.id)}" data-kind="file" data-title="${title}" data-date="${escapeHtml(video.upload_date || video.created_at || '')}" data-size="${Number(video.file_size || 0)}" data-type="${mediaType}"
+        data-media-type="${mediaType}" data-media-title="${title}" draggable="true">
+        <td class="px-4 py-3">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-8 rounded overflow-hidden bg-[#181818] flex-shrink-0 relative flex items-center justify-center">
+              ${isAudio ? `<i class="ti ti-music text-primary"></i>` : `<img src="${thumbnail}" alt="" class="w-full h-full object-cover">`}
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="font-medium text-sm truncate max-w-xs">${title}</span>
+            </div>
+          </div>
+        </td>
+        <td class="px-4 py-3 text-sm text-gray-400">${formatDuration(video.duration)}</td>
+        <td class="px-4 py-3 text-sm text-gray-400">${formatFileSize(video.file_size || 0)}</td>
+        <td class="px-4 py-3 text-sm text-gray-400">${formatGalleryDate(video.upload_date || video.created_at)}</td>
+        <td class="px-4 py-3 text-right">
+          <div class="flex items-center justify-end gap-1">
+            <button class="file-rename-btn p-1.5 hover:bg-dark-600 rounded text-gray-400 hover:text-white transition-colors" data-video-id="${escapeHtml(video.id)}" data-video-title="${title}">
+              <i class="ti ti-pencil text-sm"></i>
+            </button>
+            <button class="file-delete-btn p-1.5 hover:bg-dark-600 rounded text-gray-400 hover:text-red-400 transition-colors" data-video-id="${escapeHtml(video.id)}" data-video-title="${title}">
+              <i class="ti ti-trash text-sm"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  function bindGalleryItemInteractions() {
+    document.querySelectorAll('.gallery-playable').forEach(item => {
+      item.onclick = () => playMedia(item.dataset.id, item.dataset.mediaTitle, item.dataset.mediaType);
+    });
+
+    document.querySelectorAll('.gallery-folder-link').forEach(item => {
+      item.onclick = () => { window.location.href = `/gallery?folder=${encodeURIComponent(item.dataset.folderId)}`; };
+    });
+
+    document.querySelectorAll('.file-rename-btn').forEach(button => {
+      button.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        showRenameDialog(button.dataset.videoId, button.dataset.videoTitle);
+      };
+    });
+
+    document.querySelectorAll('.file-delete-btn').forEach(button => {
+      button.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        showDeleteDialog(button.dataset.videoId, button.dataset.videoTitle);
+      };
+    });
+
+    document.querySelectorAll('.folder-rename-btn').forEach(button => {
+      button.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        showRenameFolderDialog(button.dataset.folderId, button.dataset.folderName);
+      };
+    });
+
+    document.querySelectorAll('.folder-delete-btn').forEach(button => {
+      button.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        showDeleteFolderDialog(button.dataset.folderId, button.dataset.folderName);
+      };
+    });
+
+    document.querySelectorAll('.file-item, .file-item-row').forEach(item => {
+      item.addEventListener('dragstart', (event) => {
+        event.dataTransfer.setData('text/plain', item.dataset.id);
+        event.dataTransfer.effectAllowed = 'move';
+        item.classList.add('opacity-60');
+      });
+      item.addEventListener('dragend', () => {
+        item.classList.remove('opacity-60');
+      });
+    });
+
+    document.querySelectorAll('.folder-drop-target').forEach(target => {
+      target.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        target.classList.add('border-primary', 'bg-primary/5');
+      });
+      target.addEventListener('dragleave', () => {
+        target.classList.remove('border-primary', 'bg-primary/5');
+      });
+      target.addEventListener('drop', async (event) => {
+        event.preventDefault();
+        target.classList.remove('border-primary', 'bg-primary/5');
+        const videoId = event.dataTransfer.getData('text/plain');
+        if (videoId) {
+          await moveVideoToFolder(videoId, target.dataset.folderId);
+        }
+      });
+    });
+
+    const rootDropZone = document.getElementById('rootDropZone');
+    if (rootDropZone) {
+      rootDropZone.ondragover = (event) => {
+        event.preventDefault();
+        rootDropZone.classList.add('border-primary', 'bg-primary/5', 'text-white');
+      };
+      rootDropZone.ondragleave = () => {
+        rootDropZone.classList.remove('border-primary', 'bg-primary/5', 'text-white');
+      };
+      rootDropZone.ondrop = async (event) => {
+        event.preventDefault();
+        rootDropZone.classList.remove('border-primary', 'bg-primary/5', 'text-white');
+        const videoId = event.dataTransfer.getData('text/plain');
+        if (videoId) {
+          await moveVideoToFolder(videoId, null);
+        }
+      };
+    }
+  }
+
+  function renderGalleryContent() {
+    const content = document.getElementById('galleryContent');
+    const paginationBar = document.getElementById('galleryPaginationBar');
+    if (!content) return;
+
+    const hasRootFolders = !currentFolderId && galleryFoldersState.length > 0;
+    const totalItems = galleryVideosState.length + (hasRootFolders ? galleryFoldersState.length : 0);
+
+    if (totalItems === 0) {
+      content.innerHTML = `
+        <div class="text-center py-12">
+          <div class="w-16 h-16 rounded-full bg-dark-700 flex items-center justify-center mx-auto mb-4">
+            <i class="ti ti-video text-gray-500 text-2xl"></i>
+          </div>
+          <h3 class="text-lg font-medium text-gray-300 mb-2">No items yet</h3>
+          <p class="text-gray-500 text-sm mb-4">Upload your first media or create a folder to get started</p>
+          <button onclick="openUploadModal()" class="inline-flex items-center gap-2 bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+            <i class="ti ti-upload"></i>
+            <span>Upload Media</span>
+          </button>
+        </div>
+      `;
+      if (paginationBar) paginationBar.classList.add('hidden');
+      applyGalleryViewMode();
+      return;
+    }
+
+    const folderGridMarkup = hasRootFolders ? galleryFoldersState.map(buildFolderGridMarkup).join('') : '';
+    const folderListMarkup = hasRootFolders ? galleryFoldersState.map(buildFolderListMarkup).join('') : '';
+    const videoGridMarkup = galleryVideosState.map(buildVideoGridMarkup).join('');
+    const videoListMarkup = galleryVideosState.map(buildVideoListMarkup).join('');
+
+    content.innerHTML = `
+      <div id="gridView" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 ${currentView === 'list' ? 'hidden' : ''}">
+        ${folderGridMarkup}${videoGridMarkup}
+      </div>
+      <div id="listView" class="${currentView === 'list' ? '' : 'hidden'}">
+        <div class="overflow-x-auto">
+          <table class="min-w-full">
+            <thead class="bg-gray-700">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Name</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-24">Duration</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-28">Size</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-32">Modified</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider w-24">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-700">
+              ${folderListMarkup}${videoListMarkup}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    if (paginationBar) paginationBar.classList.remove('hidden');
+    bindGalleryItemInteractions();
+    syncGalleryCollections();
+    applyGalleryViewMode();
+    filterAndSort();
+  }
+
+  let gridItems = [];
+  let listItems = [];
+  const itemsPerPage = 18;
+  let currentPage = 1;
+  let filteredGridItems = [];
+  let filteredListItems = [];
+
+  function syncGalleryCollections() {
+    gridItems = Array.from(document.querySelectorAll('.gallery-grid-item'));
+    listItems = Array.from(document.querySelectorAll('.gallery-list-item'));
+  }
+
+  function getItemData(item) {
+    return {
+      id: item.dataset.id,
+      title: item.dataset.title || '',
+      date: new Date(item.dataset.date || 0).getTime(),
+      size: parseInt(item.dataset.size) || 0,
+      type: item.dataset.type || 'video',
+      kind: item.dataset.kind || 'file'
+    };
+  }
+
+  function filterAndSort() {
+    const search = searchInput ? searchInput.value.toLowerCase() : '';
+    const sort = sortSelect ? sortSelect.value : 'newest';
+    const typeFilter = document.getElementById('typeFilter');
+    const type = typeFilter ? typeFilter.value : 'all';
+    
+    const filterFn = (item) => {
+      const data = getItemData(item);
+      const matchesSearch = data.title.toLowerCase().includes(search);
+      const matchesType = data.kind === 'folder'
+        ? type === 'all'
+        : type === 'all' || data.type === type;
+      return matchesSearch && matchesType;
+    };
+
+    const sortFn = (a, b) => {
+      const dataA = getItemData(a);
+      const dataB = getItemData(b);
+
+      if (dataA.kind !== dataB.kind) {
+        return dataA.kind === 'folder' ? -1 : 1;
+      }
+      
+      switch (sort) {
+        case 'oldest':
+          return dataA.date - dataB.date;
+        case 'newest':
+          return dataB.date - dataA.date;
+        case 'name':
+          return dataA.title.localeCompare(dataB.title);
+        case 'size':
+          return dataB.size - dataA.size;
+        default:
+          return dataB.date - dataA.date;
+      }
+    };
+
+    syncGalleryCollections();
+    filteredGridItems = [...gridItems].filter(filterFn).sort(sortFn);
+    filteredListItems = [...listItems].filter(filterFn).sort(sortFn);
+
+    const gridContainer = document.getElementById('gridView');
+    const listContainer = document.querySelector('#listView tbody');
+    
+    filteredGridItems.forEach(item => gridContainer.appendChild(item));
+    filteredListItems.forEach(item => listContainer.appendChild(item));
+
+    currentPage = 1;
+    renderPage();
+  }
+
+  function renderPage() {
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    
+    gridItems.forEach(item => item.style.display = 'none');
+    listItems.forEach(item => item.style.display = 'none');
+    
+    filteredGridItems.slice(start, end).forEach(item => item.style.display = '');
+    filteredListItems.slice(start, end).forEach(item => item.style.display = '');
+    
+    const totalItems = filteredGridItems.length;
+    const info = document.getElementById('paginationInfo');
+    if (info) info.textContent = totalItems > 0 ? `Showing ${start + 1}-${Math.min(end, totalItems)} of ${totalItems} items` : 'No items found';
+    
+    renderPagination();
+  }
+
+  function renderPagination() {
+    const container = document.getElementById('paginationControls');
+    if (!container) return;
+    const totalPages = Math.ceil(filteredGridItems.length / itemsPerPage);
+    container.innerHTML = '';
+    
+    if (totalPages <= 1) return;
+    
+    const prev = document.createElement('button');
+    prev.className = `w-9 h-9 flex items-center justify-center rounded-lg ${currentPage === 1 ? 'bg-dark-700 text-gray-600 cursor-not-allowed' : 'bg-dark-700 hover:bg-dark-600 text-gray-400 hover:text-white transition-colors'}`;
+    prev.innerHTML = '<i class="ti ti-chevron-left"></i>';
+    prev.disabled = currentPage === 1;
+    prev.addEventListener('click', () => { if (currentPage > 1) { currentPage--; renderPage(); } });
+    container.appendChild(prev);
+
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + 4);
+    if (endPage - startPage < 4) startPage = Math.max(1, endPage - 4);
+
+    for (let i = startPage; i <= endPage; i++) {
+      const btn = document.createElement('button');
+      btn.className = `w-9 h-9 flex items-center justify-center rounded-lg ${i === currentPage ? 'bg-primary text-white' : 'bg-dark-700 hover:bg-dark-600 text-gray-400 hover:text-white transition-colors'}`;
+      btn.textContent = i;
+      btn.addEventListener('click', () => { currentPage = i; renderPage(); });
+      container.appendChild(btn);
+    }
+
+    const next = document.createElement('button');
+    next.className = `w-9 h-9 flex items-center justify-center rounded-lg ${currentPage === totalPages ? 'bg-dark-700 text-gray-600 cursor-not-allowed' : 'bg-dark-700 hover:bg-dark-600 text-gray-400 hover:text-white transition-colors'}`;
+    next.innerHTML = '<i class="ti ti-chevron-right"></i>';
+    next.disabled = currentPage === totalPages;
+    next.addEventListener('click', () => { if (currentPage < totalPages) { currentPage++; renderPage(); } });
+    container.appendChild(next);
+  }
+
+  if (searchInput) searchInput.addEventListener('input', filterAndSort);
+  if (sortSelect) sortSelect.addEventListener('change', filterAndSort);
+  const typeFilter = document.getElementById('typeFilter');
+  if (typeFilter) typeFilter.addEventListener('change', filterAndSort);
+
+  window.refreshGalleryData = async function() {
+    try {
+      const params = new URLSearchParams();
+      if (currentFolderId) {
+        params.set('folder', currentFolderId);
+      }
+      const response = await fetch(`/api/gallery/data?${params.toString()}`);
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to refresh gallery');
+      }
+      galleryVideosState = data.videos || [];
+      galleryFoldersState = data.folders || [];
+      galleryCurrentFolderState = data.currentFolder || null;
+      currentPage = 1;
+      renderGalleryContent();
+      loadDiskUsage();
+    } catch (error) {
+      console.error('Error refreshing gallery:', error);
+      showToast('error', error.message || 'Failed to refresh gallery');
+    }
+  };
+
+  initializeGalleryViewButtons();
+  bindGalleryItemInteractions();
+  syncGalleryCollections();
+  if (gridItems.length > 0) filterAndSort();
+});
+
+
+
+let youtubeDebounceTimer = null;
+let currentYoutubeInfo = null;
+
+function openYoutubeImportModal() {
+  const modal = document.getElementById('youtubeImportModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    const input = document.getElementById('youtubeUrlInput');
+    if (input) input.value = '';
+    const statusEl = document.getElementById('youtubeAutoFetchStatus');
+    if (statusEl) statusEl.innerHTML = '';
+    document.getElementById('youtubeVideoInfoContainer').classList.add('hidden');
+    document.getElementById('startYoutubeImportBtn').disabled = true;
+    currentYoutubeInfo = null;
+  }
+}
+
+function closeYoutubeImportModal() {
+  const modal = document.getElementById('youtubeImportModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const urlInput = document.getElementById('youtubeUrlInput');
+  if (urlInput) {
+    urlInput.addEventListener('input', function(e) {
+      const url = e.target.value.trim();
+      clearTimeout(youtubeDebounceTimer);
+
+      const statusEl = document.getElementById('youtubeAutoFetchStatus');
+      const infoContainer = document.getElementById('youtubeVideoInfoContainer');
+      const startBtn = document.getElementById('startYoutubeImportBtn');
+
+      if (!url) {
+        if (statusEl) statusEl.innerHTML = '';
+        if (infoContainer) infoContainer.classList.add('hidden');
+        if (startBtn) startBtn.disabled = true;
+        currentYoutubeInfo = null;
+        return;
+      }
+
+      const match = url.match(/(?:v=|\/live\/|\/embed\/|\/v\/|youtu\.be\/|\/shorts\/)([a-zA-Z0-9_-]{11})/);
+      if (match && match[1]) {
+        if (statusEl) {
+          statusEl.className = 'text-xs text-red-400 flex items-center gap-1.5 mt-1.5 font-medium animate-pulse';
+          statusEl.innerHTML = '<i class="ti ti-loader animate-spin text-sm"></i> Checking YouTube video resolutions...';
+        }
+        youtubeDebounceTimer = setTimeout(() => {
+          inspectYoutubeVideoAuto();
+        }, 400);
+      } else {
+        if (statusEl) {
+          statusEl.className = 'text-xs text-yellow-400 flex items-center gap-1.5 mt-1.5 font-medium';
+          statusEl.innerHTML = '<i class="ti ti-alert-triangle text-sm"></i> Waiting for valid YouTube URL...';
+        }
+        if (infoContainer) infoContainer.classList.add('hidden');
+        if (startBtn) startBtn.disabled = true;
+      }
+    });
+  }
+});
+
+async function inspectYoutubeVideoAuto() {
+  const urlInput = document.getElementById('youtubeUrlInput');
+  const statusEl = document.getElementById('youtubeAutoFetchStatus');
+  const url = (urlInput ? urlInput.value : '').trim();
+
+  if (!url) return;
+
+  try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 
+                      document.querySelector('input[name="_csrf"]')?.value || '';
+    const res = await fetch('/api/videos/youtube-info', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken
+      },
+      body: JSON.stringify({ youtubeUrl: url })
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      if (statusEl) {
+        statusEl.className = 'text-xs text-red-400 flex items-center gap-1.5 mt-1.5 font-medium';
+        statusEl.innerHTML = `<i class="ti ti-alert-circle text-sm"></i> ${data.error || 'Failed to inspect YouTube URL'}`;
+      }
+      document.getElementById('youtubeVideoInfoContainer').classList.add('hidden');
+      document.getElementById('startYoutubeImportBtn').disabled = true;
+      return;
+    }
+
+    currentYoutubeInfo = data;
+    currentYoutubeInfo.youtubeUrl = url;
+
+    if (statusEl) {
+      statusEl.className = 'text-xs text-emerald-400 flex items-center gap-1.5 mt-1.5 font-medium';
+      statusEl.innerHTML = '<i class="ti ti-circle-check text-sm"></i> Video found! Select resolution below.';
+    }
+
+    document.getElementById('youtubePreviewThumb').src = data.thumbnail || '/images/default-thumbnail.jpg';
+    document.getElementById('youtubePreviewTitle').textContent = data.formattedTitle;
+    
+    const mins = Math.floor((data.duration || 0) / 60);
+    const secs = (data.duration || 0) % 60;
+    document.getElementById('youtubePreviewDuration').textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+    const select = document.getElementById('youtubeResolutionSelect');
+    const cleanResolutions = (data.resolutions || []).filter(r => r.height && parseInt(r.height) > 0);
+    select.innerHTML = cleanResolutions.map(r => 
+      `<option value="${r.height}" ${parseInt(r.height) === 1080 ? 'selected' : ''}>${r.label}</option>`
+    ).join('');
+
+    document.getElementById('youtubeVideoInfoContainer').classList.remove('hidden');
+    document.getElementById('startYoutubeImportBtn').disabled = false;
+  } catch (e) {
+    console.error('Error inspecting YouTube video:', e);
+    if (statusEl) {
+      statusEl.className = 'text-xs text-red-400 flex items-center gap-1.5 mt-1.5 font-medium';
+      statusEl.innerHTML = '<i class="ti ti-alert-circle text-sm"></i> Error inspecting YouTube video';
+    }
+  }
+}
+
+async function startYoutubeImport() {
+  if (!currentYoutubeInfo) return;
+  const startBtn = document.getElementById('startYoutubeImportBtn');
+  startBtn.disabled = true;
+  startBtn.innerHTML = '<i class="ti ti-loader animate-spin text-sm"></i> Starting...';
+
+  const select = document.getElementById('youtubeResolutionSelect');
+  const targetHeight = select ? select.value : '';
+
+  try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 
+                      document.querySelector('input[name="_csrf"]')?.value || '';
+    const res = await fetch('/api/videos/import-youtube', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken
+      },
+      body: JSON.stringify({
+        youtubeUrl: currentYoutubeInfo.youtubeUrl,
+        videoId: currentYoutubeInfo.videoId,
+        formattedTitle: currentYoutubeInfo.formattedTitle,
+        targetHeight: targetHeight,
+        folderId: typeof currentFolderId !== 'undefined' ? currentFolderId : ''
+      })
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      closeYoutubeImportModal();
+      showImportProgress(data.jobId);
+    } else {
+      showToast('error', data.error || 'Failed to start YouTube import');
+      startBtn.disabled = false;
+      startBtn.innerHTML = '<i class="ti ti-download text-sm"></i> Start Download';
+    }
+  } catch (e) {
+    console.error('Error starting YouTube import:', e);
+    showToast('error', 'Error starting YouTube import');
+    startBtn.disabled = false;
+    startBtn.innerHTML = '<i class="ti ti-download text-sm"></i> Start Download';
+  }
+}
+
+</script>
+
+<style>
+* { scrollbar-width: thin; scrollbar-color: rgba(156, 163, 175, 0.3) transparent; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.3); border-radius: 20px; }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(156, 163, 175, 0.5); }
+.audio-visualizer { animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+}
+</style>

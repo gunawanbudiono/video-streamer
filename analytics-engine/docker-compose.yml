@@ -1,0 +1,27 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    container_name: analytics-clickhouse
+    ports:
+      - "127.0.0.1:8123:8123" # HTTP interface (localhost only)
+      - "127.0.0.1:9000:9000" # Native interface (localhost only)
+    volumes:
+      - ch_data:/var/lib/clickhouse
+      - ch_logs:/var/log/clickhouse-server
+      - ./docker/clickhouse/init:/docker-entrypoint-initdb.d
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+    healthcheck:
+      test: [ "CMD", "clickhouse-client", "--query", "SELECT 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  ch_data:
+  ch_logs:
