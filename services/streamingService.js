@@ -10,14 +10,18 @@ const Playlist = require('../models/Playlist');
 const Video = require('../models/Video');
 
 let ffmpegPath;
-if (fs.existsSync('/usr/bin/ffmpeg')) {
+if (fs.existsSync('/usr/local/bin/ffmpeg')) {
+  ffmpegPath = '/usr/local/bin/ffmpeg';
+} else if (fs.existsSync('/usr/bin/ffmpeg')) {
   ffmpegPath = '/usr/bin/ffmpeg';
 } else {
   ffmpegPath = ffmpegInstaller.path;
 }
 
 let ffprobePath;
-if (fs.existsSync('/usr/bin/ffprobe')) {
+if (fs.existsSync('/usr/local/bin/ffprobe')) {
+  ffprobePath = '/usr/local/bin/ffprobe';
+} else if (fs.existsSync('/usr/bin/ffprobe')) {
   ffprobePath = '/usr/bin/ffprobe';
 } else {
   ffprobePath = ffprobeInstaller.path;
@@ -46,7 +50,7 @@ const HEALTH_CHECK_INTERVAL = 30000;
 const SYNC_INTERVAL = 60000;
 const STREAM_START_TIMEOUT = 15000;
 
-const YOUTUBE_COPY_ALLOWED_VIDEO_CODECS = new Set(['h264']);
+const YOUTUBE_COPY_ALLOWED_VIDEO_CODECS = new Set(['h264', 'hevc', 'h265']);
 const YOUTUBE_COPY_ALLOWED_AUDIO_CODECS = new Set(['aac', 'mp3']);
 
 let schedulerService = null;
