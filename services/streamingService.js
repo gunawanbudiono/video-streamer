@@ -163,7 +163,12 @@ function getRelevantStartupLog(line) {
     lower.startsWith('input #') ||
     lower.startsWith('output #') ||
     lower.startsWith('metadata:') ||
-    lower.startsWith('stream mapping:')
+    lower.startsWith('stream mapping:') ||
+    lower.includes('unknown cover type') ||
+    lower.startsWith('[mov,mp4') ||
+    lower.startsWith('[flv @') ||
+    lower.startsWith('[mp4 @') ||
+    lower.startsWith('[https @')
   ) {
     return null;
   }
