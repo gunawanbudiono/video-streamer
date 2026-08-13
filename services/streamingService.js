@@ -406,7 +406,7 @@ function waitForStreamStartup(streamId, ffmpegProcess, startupState) {
   });
 }
 
-async function buildFFmpegArgsForPlaylist(stream, playlist) {
+async function buildFFmpegArgsForPlaylist(stream, playlist, elapsedSeconds = 0) {
   if (!playlist.videos || playlist.videos.length === 0) {
     throw new Error('Playlist is empty');
   }
@@ -525,11 +525,14 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   }
   fs.writeFileSync(audioConcatFile, audioContent);
 
+  const seekArgs = elapsedSeconds > 0 ? ['-ss', String(elapsedSeconds)] : [];
+
   if (!stream.use_advanced_settings) {
     return [
       '-nostdin',
       '-loglevel', 'warning',
       '-stats',
+      ...seekArgs,
       '-re',
       '-fflags', '+genpts+igndts+discardcorrupt',
       '-avoid_negative_ts', 'make_zero',
@@ -558,6 +561,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     '-nostdin',
     '-loglevel', 'warning',
     '-stats',
+    ...seekArgs,
     '-re',
     '-fflags', '+genpts+igndts+discardcorrupt',
     '-avoid_negative_ts', 'make_zero',
@@ -589,7 +593,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   ];
 }
 
-async function buildFFmpegArgs(stream) {
+async function buildFFmpegArgs(stream, elapsedSeconds = 0) {
   const streamWithVideo = await Stream.getStreamWithVideo(stream.id);
 
   if (streamWithVideo && streamWithVideo.video_type === 'playlist') {
@@ -597,7 +601,7 @@ async function buildFFmpegArgs(stream) {
     if (!playlist) {
       throw new Error('Playlist not found');
     }
-    return await buildFFmpegArgsForPlaylist(stream, playlist);
+    return await buildFFmpegArgsForPlaylist(stream, playlist, elapsedSeconds);
   }
 
   const video = await Video.findById(stream.video_id);
@@ -628,11 +632,14 @@ async function buildFFmpegArgs(stream) {
   }
   fs.writeFileSync(singleConcatFile, singleContent);
 
+  const seekArgs = elapsedSeconds > 0 ? ['-ss', String(elapsedSeconds)] : [];
+
   if (!stream.use_advanced_settings) {
     return [
       '-nostdin',
       '-loglevel', 'warning',
       '-stats',
+      ...seekArgs,
       '-re',
       '-fflags', '+genpts+igndts+discardcorrupt',
       '-avoid_negative_ts', 'make_zero',
@@ -659,6 +666,7 @@ async function buildFFmpegArgs(stream) {
     '-nostdin',
     '-loglevel', 'warning',
     '-stats',
+    ...seekArgs,
     '-re',
     '-fflags', '+genpts+igndts+discardcorrupt',
     '-avoid_negative_ts', 'make_zero',
@@ -794,7 +802,17 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
       return { success: false, error: 'Missing RTMP URL or stream key' };
     }
 
-    const ffmpegArgs = await buildFFmpegArgs(stream);
+        let elapsedSeconds = 0;
+    if (isRetry && originalStartTime) {
+      const startTimeMs = new Date(originalStartTime).getTime();
+      const nowMs = Date.now();
+      if (!isNaN(startTimeMs) && nowMs > startTimeMs) {
+        elapsedSeconds = Math.floor((nowMs - startTimeMs) / 1000);
+        addStreamLog(streamId, `Resuming live stream from elapsed timestamp: ${elapsedSeconds} seconds (-ss ${elapsedSeconds})`);
+      }
+    }
+
+    const ffmpegArgs = await buildFFmpegArgs(stream, elapsedSeconds);
 
     addStreamLog(streamId, `Starting FFmpeg process`);
 
