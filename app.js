@@ -2407,42 +2407,76 @@ app.get('/stream/:videoId', isAuthenticated, async (req, res) => {
     if (video.user_id !== req.session.userId) {
       return res.status(403).send('You do not have permission to access this video');
     }
-    const videoPath = path.join(__dirname, 'public', video.filepath);
-    if (!fs.existsSync(videoPath)) {
+    
+    // Original master video file path
+    let targetPath = path.join(__dirname, 'public', video.filepath);
+    
+    // For UI Preview playback, check if a lightweight 480p preview proxy exists, or generate one asynchronously
+    const isAudio = video.filepath && (video.filepath.includes('/audio/') || video.filepath.endsWith('.m4a') || video.filepath.endsWith('.mp3'));
+    const isPreviewRequest = req.query.mode === 'preview' || req.headers.referer?.includes('/dashboard') || req.headers.referer?.includes('/gallery');
+
+    if (!isAudio && isPreviewRequest) {
+      const previewDir = path.join(__dirname, 'public', 'uploads', 'previews');
+      if (!fs.existsSync(previewDir)) {
+        fs.mkdirSync(previewDir, { recursive: true });
+      }
+      const previewFilename = `preview_${video.id}.mp4`;
+      const previewPath = path.join(previewDir, previewFilename);
+
+      if (fs.existsSync(previewPath) && fs.statSync(previewPath).size > 100000) {
+        targetPath = previewPath;
+      } else {
+        // Trigger background NVENC 480p preview proxy generation for instant smooth playback next time
+        const { exec } = require('child_process');
+        const nvencCmd = `ffmpeg -y -i "${targetPath}" -vf "scale=-2:'min(480,ih)'" -c:v h264_nvenc -preset p1 -b:v 1200k -c:a aac -b:a 128k -movflags +faststart "${previewPath}"`;
+        exec(nvencCmd, (err) => {
+          if (err) {
+            // CPU fallback if NVENC unavailable
+            const cpuCmd = `ffmpeg -y -i "${targetPath}" -vf "scale=-2:'min(480,ih)'" -c:v libx264 -preset ultrafast -b:v 1200k -c:a aac -b:a 128k -movflags +faststart "${previewPath}"`;
+            exec(cpuCmd, () => {});
+          }
+        });
+      }
+    }
+
+    if (!fs.existsSync(targetPath)) {
+      targetPath = path.join(__dirname, 'public', video.filepath);
+    }
+    if (!fs.existsSync(targetPath)) {
       return res.status(404).send('Video file missing');
     }
-    const stat = fs.statSync(videoPath);
+
+    const stat = fs.statSync(targetPath);
     const fileSize = stat.size;
     const range = req.headers.range;
 
     res.setHeader('Content-Disposition', 'inline');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
 
     if (range) {
       const parts = range.replace(/bytes=/, '').split('-');
       const start = parseInt(parts[0], 10);
-      // Cap chunk size to 2MB (2 * 1024 * 1024 bytes) for fast initial buffering and zero lag seeking
       const maxChunk = 2 * 1024 * 1024;
       const calculatedEnd = parts[1] ? parseInt(parts[1], 10) : start + maxChunk - 1;
       const end = Math.min(calculatedEnd, fileSize - 1);
       const chunkSize = (end - start) + 1;
 
-      const file = fs.createReadStream(videoPath, { start, end, highWaterMark: 256 * 1024 });
+      const file = fs.createReadStream(targetPath, { start, end, highWaterMark: 256 * 1024 });
       res.writeHead(206, {
         'Content-Range': `bytes ${start}-${end}/${fileSize}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunkSize,
-        'Content-Type': 'video/mp4',
+        'Content-Type': isAudio ? 'audio/mp4' : 'video/mp4',
       });
       file.pipe(res);
     } else {
       res.writeHead(200, {
         'Content-Length': fileSize,
-        'Content-Type': 'video/mp4',
+        'Content-Type': isAudio ? 'audio/mp4' : 'video/mp4',
       });
-      fs.createReadStream(videoPath, { highWaterMark: 256 * 1024 }).pipe(res);
+      fs.createReadStream(targetPath, { highWaterMark: 256 * 1024 }).pipe(res);
     }
   } catch (error) {
     console.error('Streaming error:', error);
