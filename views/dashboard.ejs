@@ -3432,10 +3432,18 @@
         }
         if (submitBtn) submitBtn.classList.add('hidden');
         
-        // Disable all form inputs except player controls
-        const formElements = modal.querySelectorAll('input, select, textarea, button:not(#closeEditStreamModalBtn):not(#cancelEditStreamBtn)');
+        // Disable all form inputs EXCEPT close buttons, tips, yt link, and player controls
+        const formElements = modal.querySelectorAll('input, select, textarea, button');
         formElements.forEach(el => {
-          if (!el.closest('#editVideoPreview') && !el.closest('#editVideoPreviewMobile')) {
+          const onclickAttr = el.getAttribute('onclick') || '';
+          const isCloseBtn = onclickAttr.includes('closeEditStreamModal');
+          const isTipsBtn = onclickAttr.includes('openTipsStreaming');
+          const isYtLinkBtn = el.id === 'modalYtLiveLinkBtn';
+          const isPlayerCtrl = el.closest('#editVideoPreview') || el.closest('#editVideoPreviewMobile') || el.closest('video');
+          
+          if (isCloseBtn || isTipsBtn || isYtLinkBtn || isPlayerCtrl) {
+            el.disabled = false;
+          } else {
             el.disabled = true;
           }
         });
