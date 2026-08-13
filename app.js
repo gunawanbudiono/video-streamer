@@ -2408,18 +2408,28 @@ app.get('/stream/:videoId', isAuthenticated, async (req, res) => {
       return res.status(403).send('You do not have permission to access this video');
     }
     const videoPath = path.join(__dirname, 'public', video.filepath);
+    if (!fs.existsSync(videoPath)) {
+      return res.status(404).send('Video file missing');
+    }
     const stat = fs.statSync(videoPath);
     const fileSize = stat.size;
     const range = req.headers.range;
+
     res.setHeader('Content-Disposition', 'inline');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+
     if (range) {
       const parts = range.replace(/bytes=/, '').split('-');
       const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      // Cap chunk size to 2MB (2 * 1024 * 1024 bytes) for fast initial buffering and zero lag seeking
+      const maxChunk = 2 * 1024 * 1024;
+      const calculatedEnd = parts[1] ? parseInt(parts[1], 10) : start + maxChunk - 1;
+      const end = Math.min(calculatedEnd, fileSize - 1);
       const chunkSize = (end - start) + 1;
-      const file = fs.createReadStream(videoPath, { start, end });
+
+      const file = fs.createReadStream(videoPath, { start, end, highWaterMark: 256 * 1024 });
       res.writeHead(206, {
         'Content-Range': `bytes ${start}-${end}/${fileSize}`,
         'Accept-Ranges': 'bytes',
@@ -2432,7 +2442,7 @@ app.get('/stream/:videoId', isAuthenticated, async (req, res) => {
         'Content-Length': fileSize,
         'Content-Type': 'video/mp4',
       });
-      fs.createReadStream(videoPath).pipe(res);
+      fs.createReadStream(videoPath, { highWaterMark: 256 * 1024 }).pipe(res);
     }
   } catch (error) {
     console.error('Streaming error:', error);
