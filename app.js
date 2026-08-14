@@ -2397,6 +2397,8 @@ app.post('/api/videos/:id/rename', isAuthenticated, [
     res.status(500).json({ error: 'Failed to rename video' });
   }
 });
+const activePreviewGenerations = new Set();
+
 app.get('/stream/:videoId', isAuthenticated, async (req, res) => {
   try {
     const videoId = req.params.videoId;
@@ -2425,15 +2427,15 @@ app.get('/stream/:videoId', isAuthenticated, async (req, res) => {
 
       if (fs.existsSync(previewPath) && fs.statSync(previewPath).size > 100000) {
         targetPath = previewPath;
-      } else {
-        // Trigger background NVENC 480p preview proxy generation for instant smooth playback next time
+      } else if (!activePreviewGenerations.has(video.id)) {
+        activePreviewGenerations.add(video.id);
         const { exec } = require('child_process');
-        const nvencCmd = `ffmpeg -y -i "${targetPath}" -vf "scale=-2:'min(480,ih)'" -c:v h264_nvenc -preset p1 -b:v 1200k -c:a aac -b:a 128k -movflags +faststart "${previewPath}"`;
+        const nvencCmd = `ffmpeg -y -threads 1 -i "${targetPath}" -vf "scale=-2:'min(480,ih)'" -c:v h264_nvenc -preset p1 -b:v 1000k -c:a aac -b:a 128k -movflags +faststart "${previewPath}"`;
         exec(nvencCmd, (err) => {
+          activePreviewGenerations.delete(video.id);
           if (err) {
-            // CPU fallback if NVENC unavailable
-            const cpuCmd = `ffmpeg -y -i "${targetPath}" -vf "scale=-2:'min(480,ih)'" -c:v libx264 -preset ultrafast -b:v 1200k -c:a aac -b:a 128k -movflags +faststart "${previewPath}"`;
-            exec(cpuCmd, () => {});
+            const cpuCmd = `ffmpeg -y -threads 1 -i "${targetPath}" -vf "scale=-2:'min(480,ih)'" -c:v libx264 -preset ultrafast -b:v 1000k -c:a aac -b:a 128k -movflags +faststart "${previewPath}"`;
+            exec(cpuCmd, () => { activePreviewGenerations.delete(video.id); });
           }
         });
       }
