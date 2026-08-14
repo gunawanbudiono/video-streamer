@@ -5259,18 +5259,12 @@ process.on('SIGINT', async () => {
   });
 });
 
-process.on('uncaughtException', async (error) => {
-  console.error('Uncaught Exception:', error);
-  schedulerService.shutdown();
-  await streamingService.gracefulShutdown();
-  rotationService.shutdown();
-  process.exit(1);
+process.on('uncaughtException', (error) => {
+  console.error('[SafeHandler] Uncaught Exception:', error);
+  // Log exception safely without terminating unrelated live streams
 });
 
-process.on('unhandledRejection', async (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  schedulerService.shutdown();
-  await streamingService.gracefulShutdown();
-  rotationService.shutdown();
-  process.exit(1);
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[SafeHandler] Unhandled Rejection at:', promise, 'reason:', reason);
+  // Do NOT shutdown streams or exit process on unhandled promise rejection
 });
