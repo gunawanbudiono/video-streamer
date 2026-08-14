@@ -2431,11 +2431,11 @@ app.get('/stream/:videoId', isAuthenticated, async (req, res) => {
         activePreviewGenerations.add(video.id);
         const { exec } = require('child_process');
         const nvencCmd = `ffmpeg -y -threads 1 -i "${targetPath}" -vf "scale=-2:'min(480,ih)'" -c:v h264_nvenc -preset p1 -b:v 1000k -c:a aac -b:a 128k -movflags +faststart "${previewPath}"`;
-        exec(nvencCmd, (err) => {
+        exec(nvencCmd, { timeout: 30000 }, (err) => {
           activePreviewGenerations.delete(video.id);
           if (err) {
             const cpuCmd = `ffmpeg -y -threads 1 -i "${targetPath}" -vf "scale=-2:'min(480,ih)'" -c:v libx264 -preset ultrafast -b:v 1000k -c:a aac -b:a 128k -movflags +faststart "${previewPath}"`;
-            exec(cpuCmd, () => { activePreviewGenerations.delete(video.id); });
+            exec(cpuCmd, { timeout: 30000 }, () => { activePreviewGenerations.delete(video.id); });
           }
         });
       }
