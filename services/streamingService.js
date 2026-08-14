@@ -500,6 +500,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist, elapsedSeconds = 0) 
       '-ac', '2',
       '-f', 'flv',
       '-flvflags', 'no_duration_filesize',
+      '-shortest',
       rtmpUrl
     ];
   }
@@ -549,6 +550,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist, elapsedSeconds = 0) 
       '-c:a', 'copy',
       '-f', 'flv',
       '-flvflags', 'no_duration_filesize',
+      '-shortest',
       rtmpUrl
     ];
   }
@@ -654,6 +656,7 @@ async function buildFFmpegArgs(stream, elapsedSeconds = 0) {
       '-bsf:a', 'aac_adtstoasc',
       '-f', 'flv',
       '-flvflags', 'no_duration_filesize',
+      '-shortest',
       rtmpUrl
     ];
   }
@@ -913,6 +916,12 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
           if (wasActive) {
             try {
               await Stream.updateStatus(streamId, 'offline', currentStream.user_id);
+              if (currentStream && currentStream.is_youtube_api) {
+                try {
+                  const youtubeService = require('./youtubeService');
+                  await youtubeService.endYouTubeBroadcast(streamId);
+                } catch (ytErr) {}
+              }
               if (schedulerService) {
                 schedulerService.handleStreamStopped(streamId);
               }
