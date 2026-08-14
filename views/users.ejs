@@ -725,13 +725,13 @@ function showConfirmModal(title, message, onConfirm) {
   const modal = document.getElementById('confirmModal');
   const modalContent = document.getElementById('confirmModalContent');
   
-  modal.classList.remove('hidden');
-  
-  setTimeout(() => {
-    modal.classList.remove('opacity-0');
+  if (modal) {
+    modal.classList.remove('hidden', 'opacity-0');
+  }
+  if (modalContent) {
     modalContent.classList.remove('opacity-0', 'scale-95');
     modalContent.classList.add('opacity-100', 'scale-100');
-  }, 10);
+  }
 }
 
 function closeModal() {
