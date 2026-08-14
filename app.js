@@ -1408,6 +1408,81 @@ app.post('/api/users/create', isAdmin, upload.single('avatar'), async (req, res)
   }
 });
 
+
+// --- IMPERSONATE USER ROUTES ---
+app.post('/api/users/:id/impersonate', isAdmin, async (req, res) => {
+  try {
+    const targetUserId = req.params.id;
+    const targetUser = await User.findById(targetUserId);
+
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'Target user not found' });
+    }
+
+    if (targetUser.id === req.session.userId) {
+      return res.status(400).json({ success: false, message: 'You are already logged in as this user' });
+    }
+
+    // Save original admin session credentials if not already impersonating
+    if (!req.session.isImpersonating) {
+      req.session.originalUserId = req.session.userId;
+      req.session.originalRole = req.session.role;
+      req.session.originalUsername = req.session.username;
+    }
+
+    // Switch active session to target user
+    req.session.userId = targetUser.id;
+    req.session.role = targetUser.role;
+    req.session.username = targetUser.username;
+    req.session.isImpersonating = true;
+
+    console.log(`[Impersonate] Admin (ID: ${req.session.originalUserId}) is now impersonating user: ${targetUser.username} (${targetUser.id})`);
+
+    res.json({
+      success: true,
+      message: `Successfully switched to user ${targetUser.username}`,
+      redirectUrl: '/dashboard'
+    });
+  } catch (error) {
+    console.error('Error starting impersonation:', error);
+    res.status(500).json({ success: false, message: 'Server error starting impersonation' });
+  }
+});
+
+app.post('/api/users/stop-impersonating', isAuthenticated, async (req, res) => {
+  try {
+    if (!req.session.isImpersonating || !req.session.originalUserId) {
+      return res.status(400).json({ success: false, message: 'Not currently impersonating any user' });
+    }
+
+    const adminUser = await User.findById(req.session.originalUserId);
+    if (!adminUser) {
+      return res.status(404).json({ success: false, message: 'Original admin account not found' });
+    }
+
+    console.log(`[Impersonate] Ending impersonation session. Restoring admin: ${adminUser.username}`);
+
+    // Restore original admin session
+    req.session.userId = adminUser.id;
+    req.session.role = adminUser.role || 'admin';
+    req.session.username = adminUser.username;
+
+    delete req.session.isImpersonating;
+    delete req.session.originalUserId;
+    delete req.session.originalRole;
+    delete req.session.originalUsername;
+
+    res.json({
+      success: true,
+      message: 'Restored original admin session',
+      redirectUrl: '/users'
+    });
+  } catch (error) {
+    console.error('Error stopping impersonation:', error);
+    res.status(500).json({ success: false, message: 'Server error stopping impersonation' });
+  }
+});
+
 app.get('/api/users/:id/videos', isAdmin, async (req, res) => {
   try {
     const userId = req.params.id;
