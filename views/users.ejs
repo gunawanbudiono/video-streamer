@@ -90,20 +90,20 @@
                 <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-400">
                   <%= new Date(user.created_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' }) %>
                 </td>
-                <!-- Actions Buttons (Clean Data-Attributes) -->
+                <!-- Actions Buttons (Text-Based Buttons: Detail & Impersonate) -->
                 <td class="px-6 py-4 whitespace-nowrap text-right font-medium">
                   <div class="flex items-center justify-end space-x-2">
-                    <!-- Edit Button -->
-                    <button type="button" data-action="edit" data-user-id="<%= user.id %>" data-username="<%= user.username %>" data-role="<%= user.user_role %>" data-status="<%= user.status %>" data-avatar="<%= user.avatar_path || '' %>" data-disk-limit="<%= user.disk_limit || 0 %>" class="text-blue-400 hover:text-blue-300 p-1.5 rounded-lg hover:bg-blue-500/10 transition-all cursor-pointer" title="Edit User">
-                      <i class="ti ti-edit text-lg"></i>
+                    <!-- Detail Button (Opens Edit & Delete Modal) -->
+                    <button type="button" data-action="edit" data-user-id="<%= user.id %>" data-username="<%= user.username %>" data-role="<%= user.user_role %>" data-status="<%= user.status %>" data-avatar="<%= user.avatar_path || '' %>" data-disk-limit="<%= user.disk_limit || 0 %>" class="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 cursor-pointer" title="View Detail & Edit">
+                      <i class="ti ti-info-circle text-sm"></i>
+                      <span>Detail</span>
                     </button>
-                    <!-- Delete & Impersonate (For Other Users Only) -->
+                    
+                    <!-- Impersonate Button (Text Button, Hidden for Logged-In User) -->
                     <% if (user.id !== req.session.userId) { %>
-                      <button type="button" data-action="delete" data-user-id="<%= user.id %>" data-username="<%= user.username %>" class="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-500/10 transition-all cursor-pointer" title="Delete User">
-                        <i class="ti ti-trash text-lg"></i>
-                      </button>
-                      <button type="button" data-action="impersonate" data-user-id="<%= user.id %>" data-username="<%= user.username %>" class="text-amber-400 hover:text-amber-300 p-1.5 rounded-lg hover:bg-amber-500/10 transition-all cursor-pointer" title="Login as Member">
-                        <i class="ti ti-user-check text-lg"></i>
+                      <button type="button" data-action="impersonate" data-user-id="<%= user.id %>" data-username="<%= user.username %>" class="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 cursor-pointer" title="Login as Member">
+                        <i class="ti ti-user-check text-sm"></i>
+                        <span>Impersonate</span>
                       </button>
                     <% } %>
                   </div>
@@ -158,11 +158,14 @@
   </div>
 </div>
 
-<!-- 2. EDIT USER MODAL -->
+<!-- 2. EDIT USER MODAL (INCLUDES USER DETAIL & DELETE USER OPTION) -->
 <div id="editModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4 transition-all">
   <div class="bg-dark-800 border border-dark-700 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-5 transform transition-all scale-95 opacity-0">
     <div class="flex items-center justify-between border-b border-dark-700 pb-4">
-      <h3 class="text-lg font-bold text-white">Edit User Settings</h3>
+      <div>
+        <h3 class="text-lg font-bold text-white">User Details & Settings</h3>
+        <p class="text-xs text-gray-400 mt-0.5">Edit user profile, permissions, or delete user</p>
+      </div>
       <button type="button" onclick="closeEditModal()" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-dark-700 transition-colors"><i class="ti ti-x text-lg"></i></button>
     </div>
     <form id="editUserForm" class="space-y-4">
@@ -191,9 +194,19 @@
         <label class="block text-xs font-semibold text-gray-400 mb-1.5">Disk Quota Limit (MB)</label>
         <input type="number" id="editDiskLimit" name="diskLimit" min="0" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-blue-500" />
       </div>
-      <div class="flex items-center justify-end space-x-3 pt-3 border-t border-dark-700">
-        <button type="button" onclick="closeEditModal()" class="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-gray-300 text-xs font-semibold rounded-xl">Cancel</button>
-        <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-600/20">Save Changes</button>
+
+      <!-- Action Footer: Save Changes + Danger Zone Delete User Button -->
+      <div class="flex items-center justify-between pt-4 border-t border-dark-700">
+        <!-- Delete User Button (Danger Action Inside Edit Modal) -->
+        <button type="button" id="deleteFromEditModalBtn" onclick="triggerDeleteFromEditModal()" class="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
+          <i class="ti ti-trash text-sm"></i>
+          <span>Delete User</span>
+        </button>
+
+        <div class="flex items-center space-x-2">
+          <button type="button" onclick="closeEditModal()" class="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-gray-300 text-xs font-semibold rounded-xl">Cancel</button>
+          <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-600/20">Save Changes</button>
+        </div>
       </div>
     </form>
   </div>
@@ -276,4 +289,4 @@
 </div>
 
 <!-- INCLUDE DECOUPLED MODULAR JS FILE WITH CACHE-BUSTING VERSIONING -->
-<script src="/js/users-management.js?v=2.2.3" defer></script>
+<script src="/js/users-management.js?v=2.2.4" defer></script>

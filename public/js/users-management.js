@@ -477,3 +477,16 @@ function showToast(message, type = 'success') {
     setTimeout(() => toast.remove(), 300);
   }, 3000);
 }
+
+
+// Function to trigger Delete User from inside the Edit User Modal
+function triggerDeleteFromEditModal() {
+  const userId = document.getElementById('editUserId')?.value;
+  const username = document.getElementById('editUsername')?.value;
+  if (!userId) return;
+  
+  closeEditModal();
+  setTimeout(() => {
+    confirmDeleteUser(userId, username || 'this user');
+  }, 200);
+}

@@ -1,3 +1,12 @@
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 const importJobs = {};
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -1114,73 +1123,42 @@ app.delete('/api/history/:id', isAuthenticated, async (req, res) => {
 
 app.get('/users', isAdmin, async (req, res) => {
   try {
-    const users = await User.findAll();
-    
-    const usersWithStats = await Promise.all(users.map(async (user) => {
-      const videoStats = await new Promise((resolve, reject) => {
-        db.get(
-          `SELECT COUNT(*) as count, COALESCE(SUM(file_size), 0) as totalSize 
-           FROM videos WHERE user_id = ?`,
-          [user.id],
-          (err, row) => {
-            if (err) reject(err);
-            else resolve(row);
-          }
-        );
+    // Single-Pass SQL Join Query eliminating N+1 DB roundtrips for maximum performance
+    const query = `
+      SELECT 
+        u.*,
+        COALESCE(COUNT(DISTINCT v.id), 0) AS videoCount,
+        COALESCE(SUM(v.file_size), 0) AS totalVideoSizeBytes,
+        COALESCE(COUNT(DISTINCT s.id), 0) AS streamCount,
+        COALESCE(SUM(CASE WHEN s.status = 'live' THEN 1 ELSE 0 END), 0) AS activeStreamCount
+      FROM users u
+      LEFT JOIN videos v ON v.user_id = u.id
+      LEFT JOIN streams s ON s.user_id = u.id
+      GROUP BY u.id
+      ORDER BY u.created_at DESC;
+    `;
+
+    db.all(query, [], (err, rows) => {
+      if (err) {
+        console.error('Error fetching users with stats:', err);
+        return res.status(500).render('error', { message: 'Failed to load users' });
+      }
+
+      const usersWithStats = (rows || []).map(user => ({
+        ...user,
+        totalVideoSize: formatBytes(user.totalVideoSizeBytes || 0)
+      }));
+
+      res.render('users', {
+        title: 'User Management',
+        active: 'users',
+        users: usersWithStats,
+        req: req
       });
-      
-      const streamStats = await new Promise((resolve, reject) => {
-         db.get(
-           `SELECT COUNT(*) as count FROM streams WHERE user_id = ?`,
-           [user.id],
-           (err, row) => {
-             if (err) reject(err);
-             else resolve(row);
-           }
-         );
-       });
-       
-       const activeStreamStats = await new Promise((resolve, reject) => {
-         db.get(
-           `SELECT COUNT(*) as count FROM streams WHERE user_id = ? AND status = 'live'`,
-           [user.id],
-           (err, row) => {
-             if (err) reject(err);
-             else resolve(row);
-           }
-         );
-       });
-      
-      const formatFileSize = (bytes) => {
-        if (bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-      };
-      
-      return {
-         ...user,
-         videoCount: videoStats.count,
-         totalVideoSize: videoStats.totalSize > 0 ? formatFileSize(videoStats.totalSize) : null,
-         streamCount: streamStats.count,
-         activeStreamCount: activeStreamStats.count
-       };
-    }));
-    
-    res.render('users', {
-      title: 'User Management',
-      active: 'users',
-      users: usersWithStats,
-      user: req.user
     });
   } catch (error) {
-    console.error('Users page error:', error);
-    res.status(500).render('error', {
-      title: 'Error',
-      message: 'Failed to load users page',
-      user: req.user
-    });
+    console.error('Error rendering users page:', error);
+    res.status(500).render('error', { message: 'Internal server error' });
   }
 });
 
