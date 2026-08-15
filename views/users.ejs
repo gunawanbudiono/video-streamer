@@ -978,45 +978,97 @@ function formatDate(dateString) {
       return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
 
-function impersonateUser(userId, username) {
-  const title = 'Impersonate Member';
-  const message = `Are you sure you want to log in as member "${username}"?`;
-  
-  showConfirmModal(title, message, () => {
-    const confirmBtn = document.getElementById('confirmButton');
-    const originalText = confirmBtn ? confirmBtn.innerHTML : 'Confirm';
-    if (confirmBtn) {
-      confirmBtn.disabled = true;
-      confirmBtn.innerHTML = '<i class="ti ti-loader animate-spin"></i> Logging in...';
-    }
 
-    fetch(`/api/users/${userId}/impersonate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.success) {
-        showToast(`Logged in as ${username}`, 'success');
-        setTimeout(() => {
-          window.location.href = data.redirectUrl || '/dashboard';
-        }, 500);
-      } else {
-        showToast(data.message || 'Failed to impersonate user', 'error');
-        if (confirmBtn) {
-          confirmBtn.disabled = false;
-          confirmBtn.innerHTML = originalText;
-        }
+<!-- DEDICATED BULLETPROOF IMPERSONATE MODAL -->
+<div id="impersonateConfirmModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[999] hidden flex items-center justify-center p-4 transition-all">
+  <div class="bg-dark-800 border border-dark-700 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-5 transform transition-all scale-100 opacity-100">
+    <div class="flex items-center gap-4">
+      <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+        <i class="ti ti-user-check text-2xl"></i>
+      </div>
+      <div>
+        <h3 class="text-lg font-bold text-white">Impersonate Member</h3>
+        <p class="text-xs text-gray-400">Log in and view dashboard as member</p>
+      </div>
+    </div>
+
+    <div class="bg-dark-900/60 border border-dark-700/80 rounded-xl p-4 text-sm text-gray-300">
+      Are you sure you want to log in as member <strong id="impersonateTargetUsername" class="text-amber-400 font-bold text-base">""</strong>?
+    </div>
+
+    <div class="flex items-center justify-end gap-3 pt-2">
+      <button type="button" onclick="closeImpersonateModal()" class="px-4 py-2.5 bg-dark-700 hover:bg-dark-600 text-gray-300 text-xs font-semibold rounded-xl transition-all cursor-pointer">
+        Cancel
+      </button>
+      <button type="button" id="confirmImpersonateSubmitBtn" onclick="submitImpersonate()" class="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-dark-950 text-xs font-bold rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2 cursor-pointer">
+        <i class="ti ti-user-check text-base"></i> Confirm Login
+      </button>
+    </div>
+  </div>
+</div>
+
+
+let activeImpersonateUserId = null;
+
+function impersonateUser(userId, username) {
+  activeImpersonateUserId = userId;
+  const usernameEl = document.getElementById('impersonateTargetUsername');
+  if (usernameEl) {
+    usernameEl.innerText = `"${username}"`;
+  }
+  const modal = document.getElementById('impersonateConfirmModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+}
+
+function closeImpersonateModal() {
+  const modal = document.getElementById('impersonateConfirmModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+  activeImpersonateUserId = null;
+}
+
+function submitImpersonate() {
+  if (!activeImpersonateUserId) return;
+  const btn = document.getElementById('confirmImpersonateSubmitBtn');
+  const originalHTML = btn ? btn.innerHTML : 'Confirm Login';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader animate-spin text-base"></i> Logging in...';
+  }
+
+  fetch(`/api/users/${activeImpersonateUserId}/impersonate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      showToast('Login successful! Redirecting...', 'success');
+      setTimeout(() => {
+        window.location.href = data.redirectUrl || '/dashboard';
+      }, 500);
+    } else {
+      showToast(data.message || 'Failed to impersonate user', 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
       }
-    })
-    .catch(err => {
-      console.error(err);
-      showToast('Failed to impersonate user', 'error');
-      if (confirmBtn) {
-        confirmBtn.disabled = false;
-        confirmBtn.innerHTML = originalText;
-      }
-    });
+      closeImpersonateModal();
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    showToast('Failed to impersonate user', 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHTML;
+    }
+    closeImpersonateModal();
   });
 }
 </script>
