@@ -1,4 +1,4 @@
-﻿
+
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 B';
   const k = 1024;
@@ -5464,6 +5464,7 @@ app.get('/api/logs/activity', isAuthenticated, async (req, res) => {
 
 
 // ==================== EXPORT USER AUDIT REPORT (CSV) ====================
+app.get('/users/export/csv', (req, res) => res.redirect('/api/users/export-csv'));
 app.get('/api/users/export-csv', isAdmin, async (req, res) => {
   try {
     const query = `
