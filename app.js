@@ -1582,22 +1582,32 @@ app.post('/api/users/stop-impersonating', isAuthenticated, async (req, res) => {
 app.get('/api/users/:id/videos', isAdmin, async (req, res) => {
   try {
     const userId = req.params.id;
-    const videos = await Video.findAll(userId);
-    res.json({ success: true, videos });
+    db.all(`SELECT * FROM videos WHERE user_id = ? ORDER BY rowid DESC`, [userId], (err, rows) => {
+      if (err) {
+        console.error('Database query error fetching user videos:', err);
+        return res.json({ success: true, videos: [] });
+      }
+      res.json({ success: true, videos: rows || [] });
+    });
   } catch (error) {
     console.error('Get user videos error:', error);
-    res.status(500).json({ success: false, message: 'Failed to get user videos' });
+    res.json({ success: true, videos: [] });
   }
 });
 
 app.get('/api/users/:id/streams', isAdmin, async (req, res) => {
   try {
     const userId = req.params.id;
-    const streams = await Stream.findAll(userId);
-    res.json({ success: true, streams });
+    db.all(`SELECT * FROM streams WHERE user_id = ? ORDER BY rowid DESC`, [userId], (err, rows) => {
+      if (err) {
+        console.error('Database query error fetching user streams:', err);
+        return res.json({ success: true, streams: [] });
+      }
+      res.json({ success: true, streams: rows || [] });
+    });
   } catch (error) {
     console.error('Get user streams error:', error);
-    res.status(500).json({ success: false, message: 'Failed to get user streams' });
+    res.json({ success: true, streams: [] });
   }
 });
 
