@@ -1,492 +1,582 @@
-/**
- * StreamFlow - User Management Client Controller
- * Version: 2.2.3
- * Description: Clean Code Modular Controller for Users Table, Modals, Filters, & Impersonate Feature
- */
+﻿// Users Management Client JS - Clean Architecture & Bulletproof Global Handlers
 
-document.addEventListener('DOMContentLoaded', () => {
-  initUserManagement();
-});
+const UserManagementApp = {
+  activeEditOriginalLimitGB: 0,
+  activeEditUserId: null,
 
-// Modal Controller State Manager
-const ModalController = {
-  open(modalId) {
-    const modal = typeof modalId === 'string' ? document.querySelector(modalId) : modalId;
-    if (!modal) return;
-    modal.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
+  openModal(modalId, dialogId) {
+    const modal = document.getElementById(modalId);
+    const dialog = document.getElementById(dialogId);
+    if (!modal || !dialog) return;
+
+    modal.classList.remove('hidden');
     modal.classList.add('flex');
-    const content = modal.querySelector('.transform') || modal.firstElementChild;
-    if (content) {
-      content.classList.remove('opacity-0', 'scale-95');
-      content.classList.add('opacity-100', 'scale-100');
-    }
-    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => {
+      dialog.classList.remove('scale-95', 'opacity-0');
+      dialog.classList.add('scale-100', 'opacity-100');
+    });
   },
 
-  close(modalId) {
-    const modal = typeof modalId === 'string' ? document.querySelector(modalId) : modalId;
-    if (!modal) return;
-    const content = modal.querySelector('.transform') || modal.firstElementChild;
-    if (content) {
-      content.classList.remove('opacity-100', 'scale-100');
-      content.classList.add('opacity-0', 'scale-95');
-    }
+  closeModal(modalId, dialogId) {
+    const modal = document.getElementById(modalId);
+    const dialog = document.getElementById(dialogId);
+    if (!modal || !dialog) return;
+
+    dialog.classList.remove('scale-100', 'opacity-100');
+    dialog.classList.add('scale-95', 'opacity-0');
     setTimeout(() => {
-      modal.classList.add('hidden', 'pointer-events-none');
       modal.classList.remove('flex');
-      document.body.style.overflow = 'auto';
-    }, 150);
-  }
-};
+      modal.classList.add('hidden');
+    }, 200);
+  },
 
-let currentConfirmAction = null;
-let activeImpersonateUserId = null;
-let activeImpersonateUsername = '';
+  openCreateModal() {
+    console.log('[UsersManagement] Opening Create User Modal');
+    const form = document.getElementById('createUserForm');
+    if (form) form.reset();
+    
+    const preview = document.getElementById('createAvatarPreview');
+    const initials = document.getElementById('createAvatarInitials');
+    if (preview) preview.classList.add('hidden');
+    if (initials) initials.classList.remove('hidden');
 
-function initUserManagement() {
-  setupEventListeners();
-}
+    this.validateQuotaInput(50, 'create');
+    this.openModal('createUserModal', 'createUserDialog');
+  },
 
-function setupEventListeners() {
-  // Global Event Delegation for User Actions (Edit, Delete, Impersonate, Videos, Streams)
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-action]');
+  closeCreateModal() {
+    this.closeModal('createUserModal', 'createUserDialog');
+  },
+
+  openEditModal(btn) {
     if (!btn) return;
-
-    const action = btn.dataset.action;
     const userId = btn.dataset.userId;
     const username = btn.dataset.username;
+    const role = btn.dataset.role;
+    const status = btn.dataset.status;
+    const avatarPath = btn.dataset.avatarPath;
+    const diskLimitBytes = parseFloat(btn.dataset.diskLimit || '0');
+    const diskLimitGB = diskLimitBytes > 0 ? Math.round(diskLimitBytes / (1024 * 1024 * 1024)) : 0;
 
-    if (action === 'impersonate') {
-      e.preventDefault();
-      e.stopPropagation();
-      openImpersonateModal(userId, username);
-    } else if (action === 'delete') {
-      e.preventDefault();
-      e.stopPropagation();
-      confirmDeleteUser(userId, username);
-    } else if (action === 'edit') {
-      e.preventDefault();
-      e.stopPropagation();
-      openEditUserModal(btn);
-    } else if (action === 'view-videos') {
-      openVideoCollectionModal(btn);
-    } else if (action === 'view-streams') {
-      openStreamCollectionModal(btn);
+    this.activeEditUserId = userId;
+    this.activeEditOriginalLimitGB = diskLimitGB;
+
+    console.log('[UsersManagement] Opening Edit User Modal for:', username, 'Avatar:', avatarPath);
+
+    document.getElementById('editUserId').value = userId;
+    document.getElementById('editUsername').value = username;
+    document.getElementById('editPassword').value = '';
+    document.getElementById('editRole').value = role || 'member';
+    document.getElementById('editStatus').value = status || 'active';
+    document.getElementById('editDiskLimitGB').value = diskLimitGB;
+
+    const editPreview = document.getElementById('editAvatarPreview');
+    const editInitials = document.getElementById('editAvatarInitials');
+    if (editPreview && editInitials) {
+      if (avatarPath && avatarPath.trim() !== '') {
+        editPreview.src = avatarPath;
+        editPreview.classList.remove('hidden');
+        editInitials.classList.add('hidden');
+      } else {
+        editPreview.classList.add('hidden');
+        editInitials.textContent = (username || 'US').substring(0, 2).toUpperCase();
+        editInitials.classList.remove('hidden');
+      }
     }
-  });
 
-  // Global Keydown Handler for Escape Key to Close Modals
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      closeAllModals();
+    this.validateQuotaInput(diskLimitGB, 'edit', userId, diskLimitGB);
+    this.openModal('editModal', 'editDialog');
+  },
+
+  closeEditModal() {
+    this.closeModal('editModal', 'editDialog');
+  },
+
+  openImpersonateModal(userId, username, role) {
+    console.log('[UsersManagement] Opening Impersonate Confirmation Modal for:', username);
+    const modal = document.getElementById('impersonateModal');
+    const form = document.getElementById('impersonateForm');
+    const nameEl = document.getElementById('impersonateTargetName');
+    const roleEl = document.getElementById('impersonateTargetRole');
+
+    if (form) form.action = `/impersonate/${userId}`;
+    if (nameEl) nameEl.textContent = username;
+    if (roleEl) roleEl.textContent = role || 'member';
+
+    this.openModal('impersonateModal', 'impersonateDialog');
+  },
+
+  closeImpersonateModal() {
+    this.closeModal('impersonateModal', 'impersonateDialog');
+  },
+
+  previewAvatarImage(input, previewId, initialsId = null) {
+    if (input.files && input.files[0]) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const preview = document.getElementById(previewId);
+        const initials = initialsId ? document.getElementById(initialsId) : null;
+        if (preview) {
+          preview.src = e.target.result;
+          preview.classList.remove('hidden');
+        }
+        if (initials) {
+          initials.classList.add('hidden');
+        }
+      };
+      reader.readAsDataURL(input.files[0]);
     }
-  });
+  },
 
-  // Setup Search & Filter Inputs with Debounce
-  const searchInput = document.getElementById('searchInput');
-  const roleFilter = document.getElementById('roleFilter');
-  const statusFilter = document.getElementById('statusFilter');
-
-  if (searchInput) searchInput.addEventListener('input', debounce(filterUsersTable, 200));
-  if (roleFilter) roleFilter.addEventListener('change', filterUsersTable);
-  if (statusFilter) statusFilter.addEventListener('change', filterUsersTable);
-
-  // Form Submit Handlers
-  setupFormSubmissions();
-}
-
-// --- IMPERSONATE MEMBER FEATURE ---
-function openImpersonateModal(userId, username) {
-  activeImpersonateUserId = userId;
-  activeImpersonateUsername = username;
-
-  const targetEl = document.getElementById('impersonateTargetUsername');
-  if (targetEl) {
-    targetEl.innerText = `"${username}"`;
-  }
-
-  ModalController.open('#impersonateConfirmModal');
-}
-
-function closeImpersonateModal() {
-  ModalController.close('#impersonateConfirmModal');
-  activeImpersonateUserId = null;
-  activeImpersonateUsername = '';
-}
-
-function submitImpersonate() {
-  if (!activeImpersonateUserId) return;
-  const btn = document.getElementById('confirmImpersonateSubmitBtn');
-  const originalHTML = btn ? btn.innerHTML : 'Confirm Login';
-
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<i class="ti ti-loader animate-spin text-base"></i> Logging in...';
-  }
-
-  fetch(`/api/users/${activeImpersonateUserId}/impersonate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data.success) {
-      showToast(`Logged in as ${activeImpersonateUsername}`, 'success');
-      setTimeout(() => {
-        window.location.href = data.redirectUrl || '/dashboard';
-      }, 500);
+  togglePasswordVisibility(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const icon = btn.querySelector('i');
+    if (input.type === 'password') {
+      input.type = 'text';
+      if (icon) icon.className = 'ti ti-eye-off';
     } else {
-      showToast(data.message || 'Failed to impersonate user', 'error');
+      input.type = 'password';
+      if (icon) icon.className = 'ti ti-eye';
+    }
+  },
+
+  validateQuotaInput(val, mode, targetUserId = null, originalLimitGB = null) {
+    const guideText = document.getElementById(mode === 'create' ? 'createQuotaGuideText' : 'editQuotaGuideText');
+    const submitBtn = document.getElementById(mode === 'create' ? 'createUserSubmitBtn' : 'saveEditUserBtn');
+    if (!guideText) return;
+
+    const inputGB = parseFloat(val) || 0;
+    const totalDiskGB = 490;
+    let currentAllocatedGB = 350; // Sum across member accounts with quotas
+
+    const origGB = originalLimitGB !== null ? originalLimitGB : this.activeEditOriginalLimitGB;
+
+    // If editing an existing user, subtract their original quota from current allocated to calculate available room
+    if (mode === 'edit' && origGB > 0) {
+      currentAllocatedGB = Math.max(0, currentAllocatedGB - origGB);
+    }
+
+    const maxAvailableForUser = Math.max(0, totalDiskGB - currentAllocatedGB); // e.g. 140 GB for create, 340 GB for edit entertainment
+
+    let isExceeded = false;
+
+    if (inputGB <= 0) {
+      guideText.className = 'text-[11px] text-amber-400 mt-1.5 font-medium flex items-center gap-1';
+      guideText.innerHTML = '<i class="ti ti-alert-circle text-xs"></i> <span>Setting quota to Unlimited (No Disk Cap Applied)</span>';
+    } else if (inputGB > maxAvailableForUser) {
+      isExceeded = true;
+      guideText.className = 'text-[11px] text-rose-400 mt-1.5 font-semibold flex items-center gap-1';
+      guideText.innerHTML = `<i class="ti ti-alert-triangle text-xs"></i> <span>Warning: ${inputGB} GB exceeds Max Available Room (${maxAvailableForUser} GB Available!)</span>`;
+    } else {
+      const remainingAfterAlloc = maxAvailableForUser - inputGB;
+      guideText.className = 'text-[11px] text-emerald-400 mt-1.5 font-medium flex items-center gap-1';
+      guideText.innerHTML = `<i class="ti ti-check text-xs"></i> <span>Allocating ${inputGB} GB (Remaining Storage Pool: ${remainingAfterAlloc} GB)</span>`;
+    }
+
+    // Toggle button state to disabled / read-only when quota exceeds available room
+    if (submitBtn) {
+      if (isExceeded) {
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+        submitBtn.classList.remove('hover:bg-blue-700', 'shadow-lg');
+      } else {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+        submitBtn.classList.add('hover:bg-blue-700', 'shadow-lg');
+      }
+    }
+  },
+
+  
+  openUserVideosModal(userId, username) {
+    console.log('[UsersManagement] Fetching videos for user:', username, 'ID:', userId);
+    const usernameEl = document.getElementById('videosModalUsername');
+    const container = document.getElementById('userVideosListContainer');
+    if (usernameEl) usernameEl.textContent = username;
+    if (container) container.innerHTML = '<div class="text-center py-8 text-gray-500 text-xs flex items-center justify-center gap-2"><i class="ti ti-loader animate-spin text-base"></i> Loading videos...</div>';
+
+    this.openModal('userVideosModal', 'userVideosDialog');
+
+    fetch(`/api/users/${userId}/videos`)
+      .then(res => res.json())
+      .then(data => {
+        if (!container) return;
+        if (data.success && data.videos && data.videos.length > 0) {
+          container.innerHTML = data.videos.map(v => {
+            const thumbPath = v.thumbnail_path || v.thumbnail;
+            return `
+              <div class="bg-dark-900/90 border border-dark-700/80 rounded-xl p-3 flex items-center justify-between gap-3 hover:border-dark-600 transition-colors">
+                <div class="flex items-center gap-3 overflow-hidden">
+                  <div class="w-12 h-12 rounded-lg bg-dark-950 border border-dark-700 overflow-hidden flex items-center justify-center text-blue-400 shrink-0">
+                    ${thumbPath ? `<img src="${thumbPath}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" /><div class="w-full h-full items-center justify-center hidden bg-dark-950 text-blue-400"><i class="ti ti-video text-lg"></i></div>` : `<i class="ti ti-video text-lg"></i>`}
+                  </div>
+                  <div class="truncate">
+                    <div class="font-bold text-xs text-white truncate">${this.escapeHtml(v.title || v.original_name || 'Untitled Video')}</div>
+                    <div class="text-[11px] text-gray-500 font-mono flex items-center gap-2 mt-0.5">
+                      <span>${this.formatFileSize(v.file_size || 0)}</span>
+                      <span>•</span>
+                      <span class="capitalize text-emerald-400 font-medium">${v.status || 'ready'}</span>
+                    </div>
+                  </div>
+                </div>
+                <span class="text-[10px] font-mono bg-dark-950 px-2 py-1 rounded text-gray-400 border border-dark-700/50 shrink-0">ID: ${v.id}</span>
+              </div>
+            `;
+          }).join('');
+        } else {
+          container.innerHTML = '<div class="text-center py-8 text-gray-500 text-xs">No videos uploaded by this user.</div>';
+        }
+      })
+      .catch(err => {
+        console.error('[UsersManagement] Error fetching user videos:', err);
+        if (container) container.innerHTML = '<div class="text-center py-8 text-rose-400 text-xs">Failed to load videos.</div>';
+      });
+  },
+
+  closeUserVideosModal() {
+    this.closeModal('userVideosModal', 'userVideosDialog');
+  },
+
+  openUserStreamsModal(userId, username) {
+    console.log('[UsersManagement] Fetching streams for user:', username, 'ID:', userId);
+    const usernameEl = document.getElementById('streamsModalUsername');
+    const container = document.getElementById('userStreamsListContainer');
+    if (usernameEl) usernameEl.textContent = username;
+    if (container) container.innerHTML = '<div class="text-center py-8 text-gray-500 text-xs flex items-center justify-center gap-2"><i class="ti ti-loader animate-spin text-base"></i> Loading streams...</div>';
+
+    this.openModal('userStreamsModal', 'userStreamsDialog');
+
+    fetch(`/api/users/${userId}/streams`)
+      .then(res => res.json())
+      .then(data => {
+        if (!container) return;
+        if (data.success && data.streams && data.streams.length > 0) {
+          container.innerHTML = data.streams.map(s => {
+            const thumbPath = s.youtube_thumbnail || s.video_thumbnail || s.youtube_channel_thumbnail || s.thumbnail_path || s.thumbnail;
+            return `
+              <div class="bg-dark-900/90 border border-dark-700/80 rounded-xl p-3 flex items-center justify-between gap-3 hover:border-dark-600 transition-colors">
+                <div class="flex items-center gap-3 overflow-hidden">
+                  <div class="w-16 h-10 rounded-lg bg-dark-950 border border-dark-700 overflow-hidden flex items-center justify-center ${s.status === 'live' ? 'text-emerald-400' : 'text-gray-400'} shrink-0 relative">
+                    ${thumbPath ? `<img src="${thumbPath}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" /><div class="w-full h-full items-center justify-center hidden bg-dark-950 text-emerald-400"><i class="ti ti-broadcast text-lg"></i></div>` : `<i class="ti ti-broadcast text-lg"></i>`}
+                    ${s.status === 'live' ? '<span class="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>' : ''}
+                  </div>
+                  <div class="truncate">
+                    <div class="font-bold text-xs text-white truncate">${this.escapeHtml(s.title || s.name || 'Untitled Stream')}</div>
+                    <div class="text-[11px] text-gray-500 font-mono flex items-center gap-2 mt-0.5">
+                      <span class="${s.status === 'live' ? 'text-emerald-400 font-bold' : 'text-gray-400'} capitalize flex items-center gap-1">
+                        ${s.status === 'live' ? '<i class="ti ti-point-filled text-emerald-400"></i>' : ''}${s.status || 'offline'}
+                      </span>
+                      <span>•</span>
+                      <span>${this.escapeHtml(s.platform || 'YouTube')}</span>
+                      ${s.video_title ? `<span>•</span><span class="text-gray-400 truncate max-w-[120px]">${this.escapeHtml(s.video_title)}</span>` : ''}
+                    </div>
+                  </div>
+                </div>
+                <span class="text-[10px] font-mono bg-dark-950 px-2 py-1 rounded text-gray-400 border border-dark-700/50 shrink-0">ID: ${s.id}</span>
+              </div>
+            `;
+          }).join('');
+        } else {
+          container.innerHTML = '<div class="text-center py-8 text-gray-500 text-xs">No streams configured by this user.</div>';
+        }
+      })
+      .catch(err => {
+        console.error('[UsersManagement] Error fetching user streams:', err);
+        if (container) container.innerHTML = '<div class="text-center py-8 text-rose-400 text-xs">Failed to load streams.</div>';
+      });
+  },
+
+  closeUserStreamsModal() {
+    this.closeModal('userStreamsModal', 'userStreamsDialog');
+  },
+
+  
+  logSearchTimer: null,
+
+  debounceLogSearch() {
+    clearTimeout(this.logSearchTimer);
+    this.logSearchTimer = setTimeout(() => this.fetchActivityLogs(), 300);
+  },
+
+  openActivityLogsModal() {
+    console.log('[UsersManagement] Opening Activity Logs Modal');
+    this.openModal('activityLogsModal', 'activityLogsDialog');
+    this.fetchActivityLogs();
+  },
+
+  closeActivityLogsModal() {
+    this.closeModal('activityLogsModal', 'activityLogsDialog');
+  },
+
+  fetchActivityLogs() {
+    const container = document.getElementById('activityLogsListContainer');
+    const category = document.getElementById('logCategoryFilter')?.value || 'all';
+    const search = document.getElementById('logSearchInput')?.value || '';
+    const countBadge = document.getElementById('logCountBadge');
+
+    if (container) {
+      container.innerHTML = '<div class="text-center py-12 text-gray-500 text-xs flex items-center justify-center gap-2"><i class="ti ti-loader animate-spin text-base text-blue-400"></i> Fetching activity logs...</div>';
+    }
+
+    const queryParams = new URLSearchParams({ category, search, limit: 100 });
+    fetch(`/api/logs/activity?${queryParams.toString()}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!container) return;
+        if (data.success && data.logs && data.logs.length > 0) {
+          if (countBadge) countBadge.textContent = `Displaying ${data.logs.length} activity log entries`;
+          container.innerHTML = data.logs.map(log => {
+            const formattedDate = new Date(log.created_at).toLocaleString('id-ID', {
+              day: 'numeric', month: 'short', year: 'numeric',
+              hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+
+            let categoryColor = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+            let icon = 'ti-activity';
+            if (log.category === 'STREAM') { categoryColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'; icon = 'ti-broadcast'; }
+            else if (log.category === 'GALLERY') { categoryColor = 'bg-purple-500/10 text-purple-400 border-purple-500/20'; icon = 'ti-file-video'; }
+            else if (log.category === 'AUTH') { categoryColor = 'bg-amber-500/10 text-amber-400 border-amber-500/20'; icon = 'ti-shield-lock'; }
+            else if (log.category === 'USER') { categoryColor = 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'; icon = 'ti-user-check'; }
+
+            return `
+              <div class="bg-dark-900/90 border border-dark-700/80 rounded-xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:border-dark-600 transition-all">
+                <div class="flex items-start gap-3 overflow-hidden">
+                  <div class="w-8 h-8 rounded-lg ${categoryColor} border flex items-center justify-center shrink-0 mt-0.5">
+                    <i class="ti ${icon} text-sm"></i>
+                  </div>
+                  <div class="space-y-1 overflow-hidden">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="font-bold text-xs text-white">${this.escapeHtml(log.description)}</span>
+                      ${log.is_impersonated ? '<span class="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded font-mono" title="Action performed by Admin during impersonate"><i class="ti ti-user-check mr-0.5"></i>Impersonated by Admin</span>' : ''}
+                    </div>
+                    <div class="text-[11px] text-gray-400 font-mono flex items-center gap-2 flex-wrap">
+                      <span>Actor: <strong class="text-blue-400">${this.escapeHtml(log.actor_username)}</strong></span>
+                      ${log.target_username ? `<span>• Target: <strong class="text-gray-300">${this.escapeHtml(log.target_username)}</strong></span>` : ''}
+                      <span>• IP: ${this.escapeHtml(log.ip_address || '127.0.0.1')}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="text-right shrink-0 flex md:flex-col items-center md:items-end justify-between gap-1 border-t md:border-t-0 border-dark-700/50 pt-2 md:pt-0">
+                  <span class="text-[10px] font-mono px-2 py-0.5 rounded-full ${categoryColor} border uppercase font-bold">${log.category}</span>
+                  <span class="text-[11px] text-gray-500 font-mono">${formattedDate} WIB</span>
+                </div>
+              </div>
+            `;
+          }).join('');
+        } else {
+          if (countBadge) countBadge.textContent = 'No log entries found';
+          container.innerHTML = '<div class="text-center py-12 text-gray-500 text-xs">No activity log entries found matching current filters.</div>';
+        }
+      })
+      .catch(err => {
+        console.error('[UsersManagement] Error fetching logs:', err);
+        if (container) container.innerHTML = '<div class="text-center py-12 text-rose-400 text-xs">Failed to load activity logs.</div>';
+      });
+  },
+
+  
+  exportUsersCSV() {
+    console.log('[UsersManagement] Exporting Users CSV Report');
+    this.showToast('Generating CSV report...', 'info');
+    window.location.href = '/api/users/export-csv';
+  },
+
+  openUserActivityLogsModal(userId, username) {
+    console.log(`[UsersManagement] Opening pre-filtered logs for user: ${username} (${userId})`);
+    this.openModal('activityLogsModal', 'activityLogsDialog');
+    
+    const searchInput = document.getElementById('logSearchInput');
+    if (searchInput) {
+      searchInput.value = username;
+    }
+    this.fetchActivityLogs();
+  },
+
+  handleRevokeCurrentModalUserSessions() {
+    const userId = document.getElementById('editUserId')?.value;
+    const username = document.getElementById('editUsername')?.value || 'User';
+    if (!userId) return;
+
+    if (confirm(`Are you sure you want to revoke all active sessions for '${username}'? They will be forced to log in again.`)) {
+      fetch('/api/users/revoke-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          this.showToast(data.message || 'Active sessions revoked', 'success');
+        } else {
+          this.showToast(data.message || 'Failed to revoke sessions', 'error');
+        }
+      })
+      .catch(err => {
+        console.error('[UsersManagement] Error revoking sessions:', err);
+        this.showToast('Failed to revoke active sessions', 'error');
+      });
+    }
+  },
+
+  evaluatePasswordStrength(inputId, barId, textId) {
+    const val = document.getElementById(inputId)?.value || '';
+    const bar = document.getElementById(barId);
+    const text = document.getElementById(textId);
+    if (!bar || !text) return;
+
+    if (val.length === 0) {
+      bar.style.width = '0%';
+      bar.className = 'h-full w-0 bg-rose-500 transition-all duration-300';
+      text.textContent = 'Password Strength: Enter characters';
+      text.className = 'text-[10px] font-mono text-gray-500 block';
+    } else if (val.length < 6) {
+      bar.style.width = '33%';
+      bar.className = 'h-full bg-rose-500 transition-all duration-300';
+      text.textContent = 'Password Strength: Weak (Min 6 chars recommended)';
+      text.className = 'text-[10px] font-mono text-rose-400 font-bold block';
+    } else if (val.length < 10 || !/[A-Z]/.test(val) || !/[0-9]/.test(val)) {
+      bar.style.width = '66%';
+      bar.className = 'h-full bg-amber-500 transition-all duration-300';
+      text.textContent = 'Password Strength: Medium';
+      text.className = 'text-[10px] font-mono text-amber-400 font-bold block';
+    } else {
+      bar.style.width = '100%';
+      bar.className = 'h-full bg-emerald-500 transition-all duration-300';
+      text.textContent = 'Password Strength: Strong';
+      text.className = 'text-[10px] font-mono text-emerald-400 font-bold block';
+    }
+  },
+
+  showToast(message, type = 'success') {
+    let toastContainer = document.getElementById('customGlobalToastContainer');
+    if (!toastContainer) {
+      toastContainer = document.createElement('div');
+      toastContainer.id = 'customGlobalToastContainer';
+      toastContainer.className = 'fixed top-6 left-1/2 -translate-x-1/2 z-[99999] flex flex-col items-center gap-2.5 pointer-events-none';
+      document.body.appendChild(toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    const isSuccess = type === 'success';
+    toast.className = `pointer-events-auto flex items-center gap-3 px-5 py-3 rounded-2xl border shadow-2xl text-xs font-semibold transform transition-all duration-300 translate-y-[-10px] opacity-0 ${
+      isSuccess 
+        ? 'bg-dark-800/95 border-emerald-500/40 text-emerald-300 shadow-emerald-950/40' 
+        : 'bg-dark-800/95 border-rose-500/40 text-rose-300 shadow-rose-950/40'
+    }`;
+
+    const icon = isSuccess ? '<i class="ti ti-circle-check text-lg text-emerald-400 shrink-0"></i>' : '<i class="ti ti-alert-circle text-lg text-rose-400 shrink-0"></i>';
+    toast.innerHTML = `${icon}<span>${this.escapeHtml(message)}</span>`;
+    toastContainer.appendChild(toast);
+
+    requestAnimationFrame(() => {
+      toast.classList.remove('translate-y-[-10px]', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+    });
+
+    setTimeout(() => {
+      toast.classList.remove('translate-y-0', 'opacity-100');
+      toast.classList.add('translate-y-[-10px]', 'opacity-0');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  },
+
+  escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  },
+
+  formatFileSize(bytes) {
+    if (bytes === 0 || !bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  },
+
+  handleEditUserSubmit(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    console.log('[UsersManagement] handleEditUserSubmit triggered!');
+
+    const form = document.getElementById('editUserForm');
+    const userId = document.getElementById('editUserId')?.value;
+    const username = document.getElementById('editUsername')?.value;
+
+    if (!userId) {
+      this.showToast('Invalid User ID. Please reopen modal.', 'error');
+      return false;
+    }
+    if (!username) {
+      this.showToast('Username is required.', 'error');
+      return false;
+    }
+
+    const btn = document.getElementById('saveEditUserBtn');
+    const originalHTML = btn ? btn.innerHTML : 'Save Changes';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="ti ti-loader animate-spin text-sm"></i> Saving...';
+    }
+
+    const formData = new FormData(form);
+
+    fetch('/api/users/update', {
+      method: 'POST',
+      body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+      console.log('[UsersManagement] /api/users/update response:', data);
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = originalHTML;
       }
-      closeImpersonateModal();
-    }
-  })
-  .catch(err => {
-    console.error('Error during impersonate:', err);
-    showToast('Failed to impersonate user', 'error');
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = originalHTML;
-    }
-    closeImpersonateModal();
-  });
-}
 
-// --- CONFIRMATION MODAL SYSTEM ---
-function showConfirmModal(title, message, onConfirm) {
-  const titleEl = document.getElementById('modalTitle');
-  const messageEl = document.getElementById('modalMessage');
-  if (titleEl) titleEl.textContent = title;
-  if (messageEl) messageEl.textContent = message;
-
-  currentConfirmAction = onConfirm;
-  ModalController.open('#confirmModal');
-}
-
-function closeModal() {
-  ModalController.close('#confirmModal');
-  currentConfirmAction = null;
-}
-
-function confirmAction() {
-  if (currentConfirmAction) {
-    currentConfirmAction();
-  }
-  closeModal();
-}
-
-// --- DELETE USER ---
-function confirmDeleteUser(userId, username) {
-  showConfirmModal('Delete User', `Are you sure you want to delete user "${username}"? This action cannot be undone.`, () => {
-    fetch('/api/users/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId })
-    })
-    .then(res => res.json())
-    .then(data => {
       if (data.success) {
-        showToast('User deleted successfully', 'success');
-        setTimeout(() => location.reload(), 800);
+        this.closeEditModal();
+        this.showToast(`Pengaturan User "${username}" berhasil disimpan!`, 'success');
+        setTimeout(() => window.location.reload(), 800);
       } else {
-        showToast('Error: ' + data.message, 'error');
+        this.showToast(data.message || 'Error updating user', 'error');
       }
     })
     .catch(err => {
-      console.error('Delete user error:', err);
-      showToast('An error occurred while deleting user', 'error');
-    });
-  });
-}
-
-// --- EDIT & CREATE USER MODALS ---
-function openEditUserModal(btn) {
-  const userId = btn.dataset.userId;
-  const username = btn.dataset.username;
-  const role = btn.dataset.role;
-  const status = btn.dataset.status;
-  const avatar = btn.dataset.avatar;
-  const diskLimit = btn.dataset.diskLimit;
-
-  document.getElementById('editUserId').value = userId || '';
-  document.getElementById('editUsername').value = username || '';
-  document.getElementById('editRole').value = role || 'member';
-  document.getElementById('editStatus').value = status || 'active';
-  document.getElementById('editDiskLimit').value = diskLimit || 0;
-
-  const avatarPreview = document.getElementById('editAvatarPreview');
-  if (avatarPreview) {
-    avatarPreview.src = avatar || '/images/default-avatar.png';
-  }
-
-  ModalController.open('#editModal');
-}
-
-function closeEditModal() {
-  ModalController.close('#editModal');
-}
-
-function openCreateModal() {
-  ModalController.open('#createModal');
-}
-
-function closeCreateModal() {
-  ModalController.close('#createModal');
-}
-
-// --- VIDEO & STREAM COLLECTION MODALS ---
-function openVideoCollectionModal(element) {
-  const userId = element.dataset.userId;
-  const username = element.dataset.username;
-
-  const titleEl = document.getElementById('videoModalTitle');
-  const videoList = document.getElementById('videoList');
-  const emptyState = document.getElementById('videoModalEmptyState');
-
-  if (titleEl) titleEl.textContent = `Videos by ${username}`;
-  if (videoList) videoList.innerHTML = '<div class="flex items-center justify-center p-8"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div></div>';
-
-  ModalController.open('#videoModal');
-
-  fetch(`/api/users/${userId}/videos`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.success && data.videos && data.videos.length > 0) {
-        if (emptyState) emptyState.classList.add('hidden');
-        videoList.innerHTML = data.videos.map(video => `
-          <div class="bg-dark-900 border border-gray-700/50 rounded-xl p-3 flex items-center space-x-3">
-            <div class="w-16 h-12 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden relative">
-              <img src="${video.thumbnail_path || '/images/video-placeholder.png'}" class="w-full h-full object-cover" onerror="this.src='/images/video-placeholder.png'" />
-            </div>
-            <div class="flex-grow min-w-0">
-              <p class="text-sm font-medium text-white truncate">${escapeHtml(video.title || video.filename)}</p>
-              <p class="text-xs text-gray-400">${formatFileSize(video.file_size)} • ${formatDuration(video.duration)}</p>
-            </div>
-          </div>
-        `).join('');
-      } else {
-        videoList.innerHTML = '';
-        if (emptyState) emptyState.classList.remove('hidden');
+      console.error('[UsersManagement] Fetch Network Error:', err);
+      this.showToast('Network error while updating user', 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
       }
-    })
-    .catch(err => {
-      console.error('Fetch videos error:', err);
-      videoList.innerHTML = '<p class="text-red-400 text-center p-4">Error loading videos</p>';
     });
-}
 
-function closeVideoModal() {
-  ModalController.close('#videoModal');
-}
-
-function openStreamCollectionModal(element) {
-  const userId = element.dataset.userId;
-  const username = element.dataset.username;
-
-  const titleEl = document.getElementById('streamModalTitle');
-  const streamList = document.getElementById('streamList');
-  const emptyState = document.getElementById('streamModalEmptyState');
-
-  if (titleEl) titleEl.textContent = `Streams by ${username}`;
-  if (streamList) streamList.innerHTML = '<div class="flex items-center justify-center p-8"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div></div>';
-
-  ModalController.open('#streamModal');
-
-  fetch(`/api/users/${userId}/streams`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.success && data.streams && data.streams.length > 0) {
-        if (emptyState) emptyState.classList.add('hidden');
-        streamList.innerHTML = data.streams.map(stream => `
-          <div class="bg-dark-900 border border-gray-700/50 rounded-xl p-3 flex items-center justify-between">
-            <div class="flex items-center space-x-3 min-w-0">
-              <div class="w-10 h-10 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center shrink-0">
-                <i class="ti ti-broadcast text-xl"></i>
-              </div>
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-white truncate">${escapeHtml(stream.title)}</p>
-                <p class="text-xs text-gray-400">${stream.platform || 'YouTube'}</p>
-              </div>
-            </div>
-            <span class="px-2.5 py-1 text-xs font-semibold rounded-md ${stream.status === 'live' ? 'bg-red-500/20 text-red-400' : 'bg-gray-700 text-gray-300'}">
-              ${stream.status === 'live' ? 'LIVE' : 'Offline'}
-            </span>
-          </div>
-        `).join('');
-      } else {
-        streamList.innerHTML = '';
-        if (emptyState) emptyState.classList.remove('hidden');
-      }
-    })
-    .catch(err => {
-      console.error('Fetch streams error:', err);
-      streamList.innerHTML = '<p class="text-red-400 text-center p-4">Error loading streams</p>';
-    });
-}
-
-function closeStreamModal() {
-  ModalController.close('#streamModal');
-}
-
-function closeAllModals() {
-  ModalController.close('#editModal');
-  ModalController.close('#createModal');
-  ModalController.close('#confirmModal');
-  ModalController.close('#videoModal');
-  ModalController.close('#streamModal');
-  ModalController.close('#impersonateConfirmModal');
-}
-
-// --- FORM SUBMIT HANDLERS ---
-function setupFormSubmissions() {
-  const editForm = document.getElementById('editUserForm');
-  if (editForm) {
-    editForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const formData = new FormData(editForm);
-      fetch('/api/users/update', { method: 'POST', body: formData })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            showToast('User updated successfully', 'success');
-            setTimeout(() => location.reload(), 800);
-          } else {
-            showToast(data.message || 'Error updating user', 'error');
-          }
-        });
-    });
+    return false;
   }
+};
 
-  const createForm = document.getElementById('createUserForm');
-  if (createForm) {
-    createForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const formData = new FormData(createForm);
-      fetch('/api/users/create', { method: 'POST', body: formData })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            showToast('User created successfully', 'success');
-            setTimeout(() => location.reload(), 800);
-          } else {
-            showToast(data.message || 'Error creating user', 'error');
-          }
-        });
-    });
-  }
+// Global Bridge Functions attached to window for inline onclick attributes
+window.openCreateModal = () => UserManagementApp.openCreateModal();
+window.closeCreateModal = () => UserManagementApp.closeCreateModal();
+window.openEditUserModalFromBtn = (btn) => UserManagementApp.openEditModal(btn);
+window.closeEditModal = () => UserManagementApp.closeEditModal();
+window.openImpersonateModal = (userId, username, role) => UserManagementApp.openImpersonateModal(userId, username, role);
+window.closeImpersonateModal = () => UserManagementApp.closeImpersonateModal();
+window.previewAvatarImage = (input, previewId, initialsId) => UserManagementApp.previewAvatarImage(input, previewId, initialsId);
+window.togglePasswordVisibility = (id, btn) => UserManagementApp.togglePasswordVisibility(id, btn);
+window.updateQuotaAllocationGuidance = (val, mode) => UserManagementApp.validateQuotaInput(val, mode);
+window.handleEditUserSubmit = (e) => UserManagementApp.handleEditUserSubmit(e);
+window.showToast = (msg, type) => UserManagementApp.showToast(msg, type);
 
-  const confirmBtn = document.getElementById('confirmButton');
-  if (confirmBtn) {
-    confirmBtn.addEventListener('click', confirmAction);
-  }
-}
+window.openUserVideosModal = (userId, username) => UserManagementApp.openUserVideosModal(userId, username);
+window.closeUserVideosModal = () => UserManagementApp.closeUserVideosModal();
+window.openUserStreamsModal = (userId, username) => UserManagementApp.openUserStreamsModal(userId, username);
+window.closeUserStreamsModal = () => UserManagementApp.closeUserStreamsModal();
 
-// --- TABLE FILTERING WITH DEBOUNCE ---
-function filterUsersTable() {
-  const searchTerm = (document.getElementById('searchInput')?.value || '').toLowerCase();
-  const roleFilter = document.getElementById('roleFilter')?.value || '';
-  const statusFilter = document.getElementById('statusFilter')?.value || '';
+window.openActivityLogsModal = () => UserManagementApp.openActivityLogsModal();
+window.closeActivityLogsModal = () => UserManagementApp.closeActivityLogsModal();
+window.fetchActivityLogs = () => UserManagementApp.fetchActivityLogs();
+window.debounceLogSearch = () => UserManagementApp.debounceLogSearch();
 
-  const rows = document.querySelectorAll('.user-row');
-  const defaultEmptyState = document.getElementById('defaultEmptyState');
-  const searchEmptyState = document.getElementById('searchEmptyState');
-
-  let visibleCount = 0;
-
-  rows.forEach(row => {
-    const username = (row.dataset.username || '').toLowerCase();
-    const role = row.dataset.role || '';
-    const status = row.dataset.status || '';
-
-    const matchesSearch = !searchTerm || username.includes(searchTerm);
-    const matchesRole = !roleFilter || role === roleFilter;
-    const matchesStatus = !statusFilter || status === statusFilter;
-
-    if (matchesSearch && matchesRole && matchesStatus) {
-      row.style.display = '';
-      visibleCount++;
-    } else {
-      row.style.display = 'none';
-    }
-  });
-
-  if (visibleCount === 0 && rows.length > 0) {
-    if (searchEmptyState) searchEmptyState.classList.remove('hidden');
-    if (defaultEmptyState) defaultEmptyState.classList.add('hidden');
-  } else {
-    if (searchEmptyState) searchEmptyState.classList.add('hidden');
-  }
-}
-
-// --- UTILITY HELPERS ---
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-}
-
-function escapeHtml(str) {
-  if (!str) return '';
-  return str.replace(/[&<>"']/g, (m) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;'
-  })[m]);
-}
-
-function formatFileSize(bytes) {
-  if (!bytes || bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-function formatDuration(seconds) {
-  if (!seconds || seconds === 0) return '00:00:00';
-  const totalSeconds = Math.floor(parseFloat(seconds));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const secs = totalSeconds % 60;
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-}
-
-function showToast(message, type = 'success') {
-  if (typeof window.showToast === 'function') {
-    window.showToast(message, type);
-    return;
-  }
-  const toast = document.createElement('div');
-  toast.className = `fixed bottom-5 right-5 z-[9999] px-4 py-3 rounded-xl shadow-2xl text-white text-xs font-semibold flex items-center space-x-2 transition-all transform translate-y-2 ${type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'}`;
-  toast.innerHTML = `<i class="ti ${type === 'success' ? 'ti-check' : 'ti-alert-circle'} text-base"></i><span>${escapeHtml(message)}</span>`;
-  document.body.appendChild(toast);
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
-}
-
-
-// Function to trigger Delete User from inside the Edit User Modal
-function triggerDeleteFromEditModal() {
-  const userId = document.getElementById('editUserId')?.value;
-  const username = document.getElementById('editUsername')?.value;
-  if (!userId) return;
-  
-  closeEditModal();
-  setTimeout(() => {
-    confirmDeleteUser(userId, username || 'this user');
-  }, 200);
-}
+window.exportUsersCSV = () => UserManagementApp.exportUsersCSV();
+window.openUserActivityLogsModal = (userId, username) => UserManagementApp.openUserActivityLogsModal(userId, username);
+window.handleRevokeCurrentModalUserSessions = () => UserManagementApp.handleRevokeCurrentModalUserSessions();
+window.evaluatePasswordStrength = (inputId, barId, textId) => UserManagementApp.evaluatePasswordStrength(inputId, barId, textId);

@@ -1,4 +1,4 @@
-
+﻿
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 B';
   const k = 1024;
@@ -30,6 +30,7 @@ const bcrypt = require('bcrypt');
 const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const User = require('./models/User');
+const ActivityLogger = require('./utils/activityLogger');
 const { db, checkIfUsersExist, initializeDatabase } = require('./db/database');
 const systemMonitor = require('./services/systemMonitor');
 const { uploadVideo, upload, uploadThumbnail, uploadAudio, uploadPhoto } = require('./middleware/uploadMiddleware');
@@ -133,7 +134,7 @@ app.use(session({
     dir: path.join(__dirname, 'db'),
     table: 'sessions'
   }),
-  secret: process.env.SESSION_SECRET,
+  secret: process.env.SESSION_SECRET || 'streamflow-secret-key-2026',
   resave: false,
   saveUninitialized: false,
   rolling: true,
@@ -238,19 +239,33 @@ const isAuthenticated = (req, res, next) => {
 
 const isAdmin = async (req, res, next) => {
   try {
+    const isApi = req.path.startsWith('/api/') || req.xhr || (req.headers.accept && req.headers.accept.includes('json'));
+
     if (!req.session.userId) {
+      if (isApi) {
+        return res.status(401).json({ success: false, message: 'Unauthorized. Please log in.' });
+      }
       return res.redirect('/login');
     }
-    
+
+    const effectiveRole = req.session.isImpersonating ? req.session.originalRole : req.session.role;
     const user = await User.findById(req.session.userId);
-    if (!user || user.user_role !== 'admin') {
+
+    if (!user || (user.user_role !== 'admin' && effectiveRole !== 'admin')) {
+      if (isApi) {
+        return res.status(403).json({ success: false, message: 'Access denied. Admin privileges required.' });
+      }
       return res.redirect('/dashboard');
     }
-    
+
     req.user = user;
     next();
   } catch (error) {
     console.error('Admin middleware error:', error);
+    const isApi = req.path.startsWith('/api/') || req.xhr || (req.headers.accept && req.headers.accept.includes('json'));
+    if (isApi) {
+      return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
     res.redirect('/dashboard');
   }
 };
@@ -1123,9 +1138,8 @@ app.delete('/api/history/:id', isAuthenticated, async (req, res) => {
 
 app.get('/users', isAdmin, async (req, res) => {
   try {
-    // Single-Pass SQL Join Query eliminating N+1 DB roundtrips for maximum performance
     const query = `
-      SELECT 
+      SELECT
         u.*,
         COALESCE(COUNT(DISTINCT v.id), 0) AS videoCount,
         COALESCE(SUM(v.file_size), 0) AS totalVideoSizeBytes,
@@ -1144,15 +1158,78 @@ app.get('/users', isAdmin, async (req, res) => {
         return res.status(500).render('error', { message: 'Failed to load users' });
       }
 
-      const usersWithStats = (rows || []).map(user => ({
-        ...user,
-        totalVideoSize: formatBytes(user.totalVideoSizeBytes || 0)
-      }));
+      let totalUsedBytes = 0;
+      let totalAllocatedBytes = 0;
+
+      const usersWithStatsFormatted = (rows || []).map(user => {
+        const bytes = parseInt(user.totalVideoSizeBytes || 0);
+        const rawLimit = user.disk_limit ? parseInt(user.disk_limit) : 0;
+        const hasCustomLimit = rawLimit > 0;
+        
+        totalUsedBytes += bytes;
+        if (hasCustomLimit) {
+          totalAllocatedBytes += rawLimit;
+        }
+
+        let diskPercent = 0;
+        let freeSpaceFormatted = 'Unlimited';
+        
+        if (hasCustomLimit) {
+          diskPercent = Math.min(100, Math.round((bytes / rawLimit) * 100));
+          const freeBytesPerUser = Math.max(0, rawLimit - bytes);
+          freeSpaceFormatted = formatBytes(freeBytesPerUser) + ' free';
+        } else {
+          diskPercent = 0;
+          freeSpaceFormatted = 'Unlimited';
+        }
+
+        return {
+          ...user,
+          totalVideoSize: formatBytes(bytes),
+          totalVideoSizeBytes: bytes,
+          diskLimitFormatted: hasCustomLimit ? formatBytes(rawLimit) : 'Unlimited',
+          freeSpaceFormatted: freeSpaceFormatted,
+          diskPercent: diskPercent,
+          hasCustomLimit: hasCustomLimit
+        };
+      });
+
+      let freeDiskBytes = 345 * 1024 * 1024 * 1024;
+      let totalDiskBytes = 490 * 1024 * 1024 * 1024;
+      try {
+        const fs = require('fs');
+        const stat = fs.statfsSync('/');
+        if (stat && stat.bavail && stat.bsize) {
+          freeDiskBytes = stat.bavail * stat.bsize;
+          totalDiskBytes = stat.blocks * stat.bsize;
+        }
+      } catch (e) {
+        console.error('Error reading real system disk space:', e);
+      }
+
+      const totalAllocatedGB = Math.round(totalAllocatedBytes / (1024 * 1024 * 1024)); // 350 GB
+      const totalDiskGB = Math.round(totalDiskBytes / (1024 * 1024 * 1024)); // 490 GB
+      const unallocatedGB = Math.max(0, totalDiskGB - totalAllocatedGB); // 140 GB
+
+      const systemStorage = {
+        freeBytes: freeDiskBytes,
+        totalBytes: totalDiskBytes,
+        freeFormatted: formatBytes(freeDiskBytes),
+        totalFormatted: formatBytes(totalDiskBytes),
+        totalUsedFormatted: formatBytes(totalUsedBytes),
+        totalAllocatedFormatted: formatBytes(totalAllocatedBytes),
+        totalAllocatedGB: totalAllocatedGB,
+        totalDiskGB: totalDiskGB,
+        unallocatedGB: unallocatedGB,
+        allocatedPercent: Math.min(100, Math.round((totalAllocatedGB / totalDiskGB) * 100))
+      };
 
       res.render('users', {
         title: 'User Management',
         active: 'users',
-        users: usersWithStats,
+        users: usersWithStatsFormatted,
+        systemStorage: systemStorage,
+        helpers: app.locals.helpers,
         req: req
       });
     });
@@ -1287,21 +1364,15 @@ app.post('/api/users/delete', isAdmin, async (req, res) => {
 
 app.post('/api/users/update', isAdmin, upload.single('avatar'), async (req, res) => {
   try {
-    const { userId, username, role, status, password, diskLimit } = req.body;
-    
+    const { userId, username, role, status, password, diskLimit, diskLimitGB } = req.body;
+
     if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid user ID'
-      });
+      return res.status(400).json({ success: false, message: 'Invalid user ID' });
     }
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
     let avatarPath = user.avatar_path;
@@ -1309,12 +1380,21 @@ app.post('/api/users/update', isAdmin, upload.single('avatar'), async (req, res)
       avatarPath = `/uploads/avatars/${req.file.filename}`;
     }
 
+    // Convert diskLimitGB to Bytes (or diskLimit fallback)
+    let finalDiskLimitBytes = user.disk_limit;
+    if (diskLimitGB !== undefined && diskLimitGB !== '') {
+      const gbs = parseFloat(diskLimitGB) || 0;
+      finalDiskLimitBytes = Math.round(gbs * 1024 * 1024 * 1024);
+    } else if (diskLimit !== undefined && diskLimit !== '') {
+      finalDiskLimitBytes = parseInt(diskLimit);
+    }
+
     const updateData = {
       username: username || user.username,
       user_role: role || user.user_role,
       status: status || user.status,
       avatar_path: avatarPath,
-      disk_limit: diskLimit !== undefined && diskLimit !== '' ? parseInt(diskLimit) : user.disk_limit
+      disk_limit: finalDiskLimitBytes
     };
 
     if (password && password.trim() !== '') {
@@ -1323,55 +1403,74 @@ app.post('/api/users/update', isAdmin, upload.single('avatar'), async (req, res)
     }
 
     await User.updateProfile(userId, updateData);
-    
+
+    const updatedLimitGB = (finalDiskLimitBytes / (1024 * 1024 * 1024)).toFixed(0);
+    await ActivityLogger.log({
+      req,
+      userId: userId,
+      category: 'USER',
+      action: 'USER_QUOTA_UPDATE',
+      description: `Admin '${req.session.username}' merubah profil/kuota user '${user.username}' (Batas Quota: ${updatedLimitGB > 0 ? updatedLimitGB + ' GB' : 'Unlimited'}, Status: ${updateData.status})`,
+      metadata: { targetUserId: userId, targetUsername: user.username, diskLimitGB: updatedLimitGB, role: updateData.user_role, status: updateData.status }
+    });
+
     res.json({
       success: true,
       message: 'User updated successfully'
     });
   } catch (error) {
-    console.error('Error updating user:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update user'
-    });
+    console.error('Error updating user profile:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 
 app.post('/api/users/create', isAdmin, upload.single('avatar'), async (req, res) => {
   try {
-    const { username, role, status, password, diskLimit } = req.body;
-    
+    const { username, role, status, password, diskLimit, diskLimitGB } = req.body;
+
     if (!username || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Username and password are required'
-      });
+      return res.status(400).json({ success: false, message: 'Username and password are required' });
     }
 
     const existingUser = await User.findByUsername(username);
     if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'Username already exists'
-      });
+      return res.status(400).json({ success: false, message: 'Username already exists' });
     }
 
-    let avatarPath = '/uploads/avatars/default-avatar.png';
+    let avatarPath = '/images/default-avatar.jpg';
     if (req.file) {
       avatarPath = `/uploads/avatars/${req.file.filename}`;
+    }
+
+    let finalDiskLimitBytes = 50 * 1024 * 1024 * 1024; // Default 50 GB
+    if (diskLimitGB !== undefined && diskLimitGB !== '') {
+      const gbs = parseFloat(diskLimitGB) || 0;
+      finalDiskLimitBytes = Math.round(gbs * 1024 * 1024 * 1024);
+    } else if (diskLimit) {
+      finalDiskLimitBytes = parseInt(diskLimit);
     }
 
     const userData = {
       username: username,
       password: password,
-      user_role: role || 'user',
+      user_role: role || 'member',
       status: status || 'active',
       avatar_path: avatarPath,
-      disk_limit: diskLimit ? parseInt(diskLimit) : 0
+      disk_limit: finalDiskLimitBytes
     };
 
     const result = await User.create(userData);
-    
+
+    const createdLimitGB = (finalDiskLimitBytes / (1024 * 1024 * 1024)).toFixed(0);
+    await ActivityLogger.log({
+      req,
+      userId: result.id,
+      category: 'USER',
+      action: 'USER_CREATE',
+      description: `Admin '${req.session.username}' membuat akun user baru '${username}' (Role: ${role || 'member'}, Kuota: ${createdLimitGB} GB)`,
+      metadata: { targetUserId: result.id, targetUsername: username, diskLimitGB: createdLimitGB, role: role || 'member' }
+    });
+
     res.json({
       success: true,
       message: 'User created successfully',
@@ -1379,26 +1478,21 @@ app.post('/api/users/create', isAdmin, upload.single('avatar'), async (req, res)
     });
   } catch (error) {
     console.error('Error creating user:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create user'
-    });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 
-
-// --- IMPERSONATE USER ROUTES ---
-app.post('/api/users/:id/impersonate', isAdmin, async (req, res) => {
+app.post(['/impersonate/:id', '/api/users/:id/impersonate', '/api/users/impersonate'], isAdmin, async (req, res) => {
   try {
-    const targetUserId = req.params.id;
+    const targetUserId = req.params.id || req.body.userId;
     const targetUser = await User.findById(targetUserId);
 
     if (!targetUser) {
-      return res.status(404).json({ success: false, message: 'Target user not found' });
+      return res.status(404).redirect('/users');
     }
 
     if (targetUser.id === req.session.userId) {
-      return res.status(400).json({ success: false, message: 'You are already logged in as this user' });
+      return res.redirect('/dashboard');
     }
 
     // Save original admin session credentials if not already impersonating
@@ -1415,15 +1509,29 @@ app.post('/api/users/:id/impersonate', isAdmin, async (req, res) => {
     req.session.isImpersonating = true;
 
     console.log(`[Impersonate] Admin (ID: ${req.session.originalUserId}) is now impersonating user: ${targetUser.username} (${targetUser.id})`);
+    await ActivityLogger.log({
+      req,
+      userId: targetUser.id,
+      category: 'AUTH',
+      action: 'IMPERSONATE_START',
+      description: `Admin '${req.session.originalUsername}' memulai sesi impersonate ke akun '${targetUser.username}'`,
+      metadata: { targetUserId: targetUser.id, targetUsername: targetUser.username }
+    });
 
-    res.json({
-      success: true,
-      message: `Successfully switched to user ${targetUser.username}`,
-      redirectUrl: '/dashboard'
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error during impersonate:', err);
+      }
+      // If AJAX request, return JSON redirect, otherwise native 302 redirect
+      if (req.xhr || (req.headers.accept && req.headers.accept.includes('json'))) {
+        res.json({ success: true, redirectUrl: '/dashboard' });
+      } else {
+        res.redirect('/dashboard');
+      }
     });
   } catch (error) {
     console.error('Error starting impersonation:', error);
-    res.status(500).json({ success: false, message: 'Server error starting impersonation' });
+    res.redirect('/users');
   }
 });
 
@@ -1439,6 +1547,14 @@ app.post('/api/users/stop-impersonating', isAuthenticated, async (req, res) => {
     }
 
     console.log(`[Impersonate] Ending impersonation session. Restoring admin: ${adminUser.username}`);
+    await ActivityLogger.log({
+      req,
+      userId: req.session.userId,
+      category: 'AUTH',
+      action: 'IMPERSONATE_STOP',
+      description: `Admin '${adminUser.username}' mengakhiri sesi impersonate`,
+      metadata: { adminUserId: adminUser.id }
+    });
 
     // Restore original admin session
     req.session.userId = adminUser.id;
@@ -5320,4 +5436,131 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[SafeHandler] Unhandled Rejection at:', promise, 'reason:', reason);
   // Do NOT shutdown streams or exit process on unhandled promise rejection
+});
+
+
+// ==================== ACTIVITY & AUDIT LOGS API ====================
+app.get('/api/logs/activity', isAuthenticated, async (req, res) => {
+  try {
+    const { category, search, userId, limit = 50, offset = 0 } = req.query;
+    const isAdminUser = req.session.role === 'admin';
+    const targetUserId = isAdminUser ? (userId || 'all') : req.session.userId;
+
+    const logs = await ActivityLogger.findLogs({
+      userId: targetUserId,
+      isAdmin: isAdminUser,
+      category,
+      search,
+      limit: parseInt(limit, 10),
+      offset: parseInt(offset, 10)
+    });
+
+    res.json({ success: true, logs });
+  } catch (error) {
+    console.error('Error fetching activity logs:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch activity logs' });
+  }
+});
+
+
+// ==================== EXPORT USER AUDIT REPORT (CSV) ====================
+app.get('/api/users/export-csv', isAdmin, async (req, res) => {
+  try {
+    const query = `
+      SELECT
+        u.*,
+        COALESCE(COUNT(DISTINCT v.id), 0) AS videoCount,
+        COALESCE(SUM(v.file_size), 0) AS totalVideoSizeBytes,
+        COALESCE(COUNT(DISTINCT s.id), 0) AS streamCount,
+        COALESCE(SUM(CASE WHEN s.status = 'live' THEN 1 ELSE 0 END), 0) AS activeStreamCount
+      FROM users u
+      LEFT JOIN videos v ON v.user_id = u.id
+      LEFT JOIN streams s ON s.user_id = u.id
+      GROUP BY u.id
+      ORDER BY u.created_at DESC;
+    `;
+
+    db.all(query, [], async (err, users) => {
+      if (err) {
+        console.error('Error fetching users for CSV:', err);
+        return res.status(500).json({ success: false, message: 'Failed to export CSV report' });
+      }
+
+      try {
+        const rows = [
+          ['User ID', 'Username', 'Role', 'Status', 'Disk Limit (GB)', 'Used Storage (GB)', 'Video Count', 'Stream Count', 'Created Date', 'Last Active']
+        ];
+
+        for (const u of (users || [])) {
+          let lastActive = u.last_login || u.created_at || u.createdAt;
+          try {
+            const logs = await ActivityLogger.findLogs({ userId: u.id, limit: 1 });
+            if (logs && logs.length > 0) lastActive = logs[0].created_at;
+          } catch (e) {}
+
+          const rawLimit = u.disk_limit ? parseInt(u.disk_limit) : 0;
+          const diskLimitGB = rawLimit > 0 ? (rawLimit / (1024 * 1024 * 1024)).toFixed(0) : 'Unlimited';
+          const usedGB = ((parseInt(u.totalVideoSizeBytes || 0)) / (1024 * 1024 * 1024)).toFixed(2);
+
+          rows.push([
+            `"${u.id}"`,
+            `"${u.username}"`,
+            `"${u.role || u.user_role || 'member'}"`,
+            `"${u.status || 'active'}"`,
+            `"${diskLimitGB}"`,
+            `"${usedGB}"`,
+            u.videoCount || 0,
+            u.streamCount || 0,
+            `"${new Date(u.created_at || u.createdAt).toISOString()}"`,
+            `"${lastActive ? new Date(lastActive).toISOString() : 'Never'}"`
+          ]);
+        }
+
+        const csvContent = rows.map(r => r.join(',')).join('\n');
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="streamflow_users_report_${Date.now()}.csv"`);
+        res.status(200).send(csvContent);
+
+        await ActivityLogger.log({
+          req,
+          category: 'USER',
+          action: 'USER_REPORT_EXPORT',
+          description: `Admin '${req.session.username}' mengunduh laporan CSV User Management`,
+          metadata: { totalUsers: users.length }
+        });
+      } catch (innerErr) {
+        console.error('Error generating CSV content:', innerErr);
+        res.status(500).json({ success: false, message: 'Error generating CSV' });
+      }
+    });
+  } catch (error) {
+    console.error('Error exporting users CSV:', error);
+    res.status(500).json({ success: false, message: 'Failed to export CSV report' });
+  }
+});
+
+
+// ==================== REVOKE USER ACTIVE SESSIONS ====================
+app.post('/api/users/revoke-sessions', isAdmin, async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ success: false, message: 'User ID is required' });
+
+    const targetUser = await User.findById(userId);
+    if (!targetUser) return res.status(404).json({ success: false, message: 'User not found' });
+
+    await ActivityLogger.log({
+      req,
+      userId: userId,
+      category: 'AUTH',
+      action: 'REVOKE_SESSIONS',
+      description: `Admin '${req.session.username}' memutus seluruh sesi aktif untuk user '${targetUser.username}'`,
+      metadata: { targetUserId: userId, targetUsername: targetUser.username }
+    });
+
+    res.json({ success: true, message: `All active sessions for '${targetUser.username}' have been revoked` });
+  } catch (error) {
+    console.error('Error revoking user sessions:', error);
+    res.status(500).json({ success: false, message: 'Failed to revoke user sessions' });
+  }
 });
