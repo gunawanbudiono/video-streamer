@@ -1151,7 +1151,7 @@ app.get('/users', isAdmin, async (req, res) => {
       LEFT JOIN videos v ON v.user_id = u.id
       LEFT JOIN streams s ON s.user_id = u.id
       GROUP BY u.id
-      ORDER BY u.created_at DESC;
+      ORDER BY u.createdAt DESC;
     `;
 
     db.all(query, [], (err, rows) => {
@@ -5480,7 +5480,7 @@ app.get('/api/users/export-csv', isAdmin, async (req, res) => {
       LEFT JOIN videos v ON v.user_id = u.id
       LEFT JOIN streams s ON s.user_id = u.id
       GROUP BY u.id
-      ORDER BY u.created_at DESC;
+      ORDER BY u.createdAt DESC;
     `;
 
     db.all(query, [], async (err, users) => {
