@@ -248,10 +248,12 @@ const isAdmin = async (req, res, next) => {
       return res.redirect('/login');
     }
 
-    const effectiveRole = req.session.isImpersonating ? req.session.originalRole : req.session.role;
+    const effectiveRole = req.session.isImpersonating ? req.session.originalRole : (req.session.role || req.session.userRole || req.session.user_role);
     const user = await User.findById(req.session.userId);
 
-    if (!user || (user.user_role !== 'admin' && effectiveRole !== 'admin')) {
+    const userRole = user ? (user.role || user.user_role) : null;
+
+    if (!user || (userRole !== 'admin' && effectiveRole !== 'admin')) {
       if (isApi) {
         return res.status(403).json({ success: false, message: 'Access denied. Admin privileges required.' });
       }
