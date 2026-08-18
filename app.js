@@ -1142,7 +1142,7 @@ app.get('/users', isAdmin, async (req, res) => {
       SELECT
         u.*,
         COALESCE(COUNT(DISTINCT v.id), 0) AS videoCount,
-        COALESCE(SUM(v.file_size), 0) AS totalVideoSizeBytes,
+        COALESCE(SUM(COALESCE(v.size, v.file_size, 0)), 0) AS totalVideoSizeBytes,
         COALESCE(COUNT(DISTINCT s.id), 0) AS streamCount,
         COALESCE(SUM(CASE WHEN s.status = 'live' THEN 1 ELSE 0 END), 0) AS activeStreamCount
       FROM users u
@@ -5471,7 +5471,7 @@ app.get('/api/users/export-csv', isAdmin, async (req, res) => {
       SELECT
         u.*,
         COALESCE(COUNT(DISTINCT v.id), 0) AS videoCount,
-        COALESCE(SUM(v.file_size), 0) AS totalVideoSizeBytes,
+        COALESCE(SUM(COALESCE(v.size, v.file_size, 0)), 0) AS totalVideoSizeBytes,
         COALESCE(COUNT(DISTINCT s.id), 0) AS streamCount,
         COALESCE(SUM(CASE WHEN s.status = 'live' THEN 1 ELSE 0 END), 0) AS activeStreamCount
       FROM users u

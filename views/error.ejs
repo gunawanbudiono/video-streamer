@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof title !== 'undefined' ? title : 'Error' %> - StreamFlow</title>
+  <link rel="icon" href="/images/logo_mobile.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/images/favicon.ico" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.30.0/tabler-icons.min.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        fontFamily: {
+          'inter': ['Inter', 'sans-serif'],
+          'sans': ['Inter', 'system-ui', 'sans-serif']
+        },
+        extend: {
+          colors: {
+            'primary': '#0055FF',
+            'dark': {
+              '900': '#121212',
+              '800': '#252525',
+              '700': '#2D2D2D',
+              '600': '#3D3D3D'
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-dark-900 text-white font-inter">
+  <div class="min-h-screen flex items-center justify-center px-6">
+    <div class="w-full max-w-md bg-dark-800 border border-dark-700 rounded-2xl shadow-2xl p-8 text-center">
+      <div class="flex justify-center mb-6">
+        <div class="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500">
+          <i class="ti ti-alert-triangle text-3xl"></i>
+        </div>
+      </div>
+      <h2 class="text-xl font-bold mb-2 text-white"><%= typeof title !== 'undefined' ? title : 'System Error' %></h2>
+      <p class="text-sm text-gray-400 mb-6">
+        <%= typeof error !== 'undefined' ? error : (typeof message !== 'undefined' ? message : 'An unexpected error occurred.') %>
+      </p>
+      <a href="/users" class="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-6 rounded-xl font-semibold text-xs shadow-lg shadow-blue-600/20 transition-all">
+        <i class="ti ti-arrow-left text-base"></i>
+        <span>Return to User Management</span>
+      </a>
+    </div>
+  </div>
+</body>
+</html>
