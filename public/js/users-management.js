@@ -1,4 +1,4 @@
-﻿// Users Management Client JS - Clean Architecture & Bulletproof Global Handlers
+// Users Management Client JS - Clean Architecture & Bulletproof Global Handlers
 
 const UserManagementApp = {
   activeEditOriginalLimitGB: 0,
@@ -209,12 +209,12 @@ const UserManagementApp = {
               <div class="bg-dark-900/90 border border-dark-700/80 rounded-xl p-3 flex items-center justify-between gap-3 hover:border-dark-600 transition-colors">
                 <div class="flex items-center gap-3 overflow-hidden">
                   <div class="w-12 h-12 rounded-lg bg-dark-950 border border-dark-700 overflow-hidden flex items-center justify-center text-blue-400 shrink-0">
-                    ${thumbPath ? `<img src="${thumbPath}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" /><div class="w-full h-full items-center justify-center hidden bg-dark-950 text-blue-400"><i class="ti ti-video text-lg"></i></div>` : `<i class="ti ti-video text-lg"></i>`}
+                    ${thumbPath ? `<img src="${thumbPath}" class="w-full h-full object-cover" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" /><div class="w-full h-full items-center justify-center hidden bg-dark-950 text-blue-400"><i class="ti ti-video text-lg"></i></div>` : `<div class="w-full h-full flex items-center justify-center bg-dark-950 text-blue-400"><i class="ti ti-video text-lg"></i></div>`}
                   </div>
                   <div class="truncate">
                     <div class="font-bold text-xs text-white truncate">${this.escapeHtml(v.title || v.original_name || 'Untitled Video')}</div>
                     <div class="text-[11px] text-gray-500 font-mono flex items-center gap-2 mt-0.5">
-                      <span>${this.formatFileSize(v.file_size || 0)}</span>
+                      <span>${this.formatFileSize(v.size || v.file_size || 0)}</span>
                       <span>•</span>
                       <span class="capitalize text-emerald-400 font-medium">${v.status || 'ready'}</span>
                     </div>
