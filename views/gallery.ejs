@@ -159,10 +159,11 @@ function formatDuration(seconds) {
         const hasKeyframeIssue = video.is_keyframe_issue || video.health_status === 'keyframe_issue' || video.health_status === 'bitrate_and_keyframe_issue';
         const isLowBitrate = video.is_low_bitrate || video.health_status === 'bitrate_issue';
         const isHealthy = !hasKeyframeIssue && !isLowBitrate;
+        const keyframeIntervalText = video.keyframe_interval || (hasKeyframeIssue ? '10.0s' : '2.0s');
       %>
       <div class="gallery-grid-item file-item group bg-[#18181b] rounded-2xl overflow-hidden border border-[#27272a] hover:border-gray-600 transition-all cursor-pointer flex flex-col justify-between"
         data-id="<%= video.id %>" data-kind="file" data-title="<%= video.title %>" data-date="<%= video.upload_date || video.created_at %>" data-size="<%= video.size || video.file_size || 0 %>" data-type="<%= mediaType %>"
-        draggable="true">
+        draggable="true" onclick="openMediaPreviewModal('<%= video.filepath %>', '<%= video.title %>', '<%= resText %>', <%= isAudio %>)">
         <div>
           <% if (isAudio) { %>
           <div class="aspect-video relative overflow-hidden bg-gradient-to-br from-[#1e1333] to-[#120a21] flex items-center justify-center">
@@ -189,7 +190,7 @@ function formatDuration(seconds) {
               <h3 class="font-semibold text-sm text-white truncate max-w-[160px]" title="<%= video.title %>"><%= video.title %></h3>
               <% if (!isAudio) { %>
                 <% if (hasKeyframeIssue) { %>
-                  <span class="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#2a2215] text-[#fbbf24] border border-[#78350f] flex items-center gap-1"><i class="ti ti-alert-triangle text-xs"></i> Keyframe Fix Needed</span>
+                  <span class="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#2a2215] text-[#fbbf24] border border-[#78350f] flex items-center gap-1"><i class="ti ti-alert-triangle text-xs"></i> Keyframe Issue</span>
                 <% } else if (isLowBitrate) { %>
                   <span class="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#2a2215] text-[#fbbf24] border border-[#78350f] flex items-center gap-1"><i class="ti ti-alert-triangle text-xs"></i> Low Bitrate</span>
                 <% } else { %>
@@ -207,9 +208,9 @@ function formatDuration(seconds) {
             </div>
             <div class="text-xs font-mono">
               <% if (hasKeyframeIssue) { %>
-                <span class="text-[#fbbf24] font-medium">Keyframe: <%= video.keyframe_interval || '10.0s' %> (Fix Needed)</span>
+                <span class="text-[#fbbf24] font-medium">Keyframe: <%= keyframeIntervalText %></span>
               <% } else { %>
-                <span class="text-gray-400">Keyframe: <%= video.keyframe_interval || '2.0s' %></span>
+                <span class="text-gray-400">Keyframe: <%= keyframeIntervalText %></span>
               <% } %>
             </div>
             <% } else { %>
@@ -1575,10 +1576,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const isHealthy = !hasKeyframeIssue && !isLowBitrate;
     const formattedSize = formatFileSize(video.size || video.file_size || 0);
     const formattedDur = formatDuration(video.duration);
+    const keyframeIntervalText = video.keyframe_interval || (hasKeyframeIssue ? '10.0s' : '2.0s');
+    const filepath = escapeHtml(video.filepath || '');
 
     let badgeMarkup = '';
     if (hasKeyframeIssue) {
-      badgeMarkup = `<span class="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#2a2215] text-[#fbbf24] border border-[#78350f] flex items-center gap-1"><i class="ti ti-alert-triangle text-xs"></i> Keyframe Fix Needed</span>`;
+      badgeMarkup = `<span class="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#2a2215] text-[#fbbf24] border border-[#78350f] flex items-center gap-1"><i class="ti ti-alert-triangle text-xs"></i> Keyframe Issue</span>`;
     } else if (isLowBitrate) {
       badgeMarkup = `<span class="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#2a2215] text-[#fbbf24] border border-[#78350f] flex items-center gap-1"><i class="ti ti-alert-triangle text-xs"></i> Low Bitrate</span>`;
     } else {
@@ -1587,7 +1590,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     return `
       <div class="gallery-grid-item file-item group bg-[#18181b] rounded-2xl overflow-hidden border border-[#27272a] hover:border-gray-600 transition-all cursor-pointer flex flex-col justify-between"
-        data-id="${escapeHtml(video.id)}" data-kind="file" data-title="${title}" data-date="${escapeHtml(video.upload_date || video.created_at || '')}" data-size="${Number(video.size || video.file_size || 0)}" data-type="${mediaType}" draggable="true">
+        data-id="${escapeHtml(video.id)}" data-kind="file" data-title="${title}" data-date="${escapeHtml(video.upload_date || video.created_at || '')}" data-size="${Number(video.size || video.file_size || 0)}" data-type="${mediaType}" draggable="true"
+        onclick="openMediaPreviewModal('${filepath}', '${title}', '${resText}', ${isAudio})">
         
         <div>
           ${isAudio ? `
@@ -1622,7 +1626,7 @@ document.addEventListener('DOMContentLoaded', function() {
               <span>${fpsText}</span>
             </div>
             <div class="text-xs font-mono">
-              ${hasKeyframeIssue ? `<span class="text-[#fbbf24] font-medium">Keyframe: ${video.keyframe_interval || '10.0s'} (Fix Needed)</span>` : `<span class="text-gray-400">Keyframe: ${video.keyframe_interval || '2.0s'}</span>`}
+              ${hasKeyframeIssue ? `<span class="text-[#fbbf24] font-medium">Keyframe: ${keyframeIntervalText}</span>` : `<span class="text-gray-400">Keyframe: ${keyframeIntervalText}</span>`}
             </div>` : `
             <div class="text-xs text-[#a78bfa] font-mono">
               ${bitrateText} • AAC
@@ -2377,8 +2381,87 @@ async function checkOptimizationProgress(videoId) {
         Cancel
       </button>
     </div>
+<!-- MEDIA PREVIEW MODAL -->
+<div id="mediaPreviewModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden modal-overlay flex items-center justify-center p-4">
+  <div class="bg-[#18181b] border border-[#27272a] rounded-2xl shadow-2xl max-w-3xl w-full p-5 space-y-4 m-auto">
+    <div class="flex items-center justify-between border-b border-[#27272a] pb-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center">
+          <i class="ti ti-player-play text-lg"></i>
+        </div>
+        <div>
+          <h3 id="previewMediaTitle" class="text-base font-bold text-white truncate max-w-md">Media Preview</h3>
+          <p id="previewMediaSub" class="text-xs text-gray-400">Previewing media file</p>
+        </div>
+      </div>
+      <button type="button" onclick="closeMediaPreviewModal()" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-dark-700 transition-colors">
+        <i class="ti ti-x text-xl"></i>
+      </button>
+    </div>
+
+    <div class="w-full bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center shadow-inner relative border border-[#27272a]">
+      <video id="previewVideoPlayer" class="w-full h-full object-contain hidden" controls autoplay preload="auto">
+        <source id="previewVideoSource" src="" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+      <audio id="previewAudioPlayer" class="w-full px-6 hidden" controls autoplay preload="auto">
+        <source id="previewAudioSource" src="" type="audio/mp3">
+      </audio>
+    </div>
+
+    <div class="flex items-center justify-between text-xs text-gray-400 pt-1">
+      <span id="previewMediaMeta">Resolution: --</span>
+      <button type="button" onclick="closeMediaPreviewModal()" class="px-4 py-1.5 bg-dark-700 hover:bg-dark-600 text-white rounded-lg text-xs font-medium transition-colors">
+        Close Preview
+      </button>
+    </div>
   </div>
 </div>
+
+<script>
+function openMediaPreviewModal(filepath, title, resolution, isAudio) {
+  const modal = document.getElementById('mediaPreviewModal');
+  const vPlayer = document.getElementById('previewVideoPlayer');
+  const vSource = document.getElementById('previewVideoSource');
+  const aPlayer = document.getElementById('previewAudioPlayer');
+  const aSource = document.getElementById('previewAudioSource');
+  
+  if (!filepath) return;
+
+  document.getElementById('previewMediaTitle').textContent = title || 'Media Preview';
+  document.getElementById('previewMediaSub').textContent = isAudio ? 'Audio File' : 'Video File';
+  document.getElementById('previewMediaMeta').textContent = isAudio ? 'Audio Stream' : `Resolution: ${resolution || '1080p'}`;
+
+  if (isAudio) {
+    if (vPlayer) { vPlayer.classList.add('hidden'); vPlayer.pause(); }
+    if (aPlayer) {
+      aPlayer.classList.remove('hidden');
+      aSource.src = filepath;
+      aPlayer.load();
+      aPlayer.play().catch(e => console.log('Audio autoplay:', e));
+    }
+  } else {
+    if (aPlayer) { aPlayer.classList.add('hidden'); aPlayer.pause(); }
+    if (vPlayer) {
+      vPlayer.classList.remove('hidden');
+      vSource.src = filepath;
+      vPlayer.load();
+      vPlayer.play().catch(e => console.log('Video autoplay:', e));
+    }
+  }
+
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeMediaPreviewModal() {
+  const modal = document.getElementById('mediaPreviewModal');
+  const vPlayer = document.getElementById('previewVideoPlayer');
+  const aPlayer = document.getElementById('previewAudioPlayer');
+  if (vPlayer) vPlayer.pause();
+  if (aPlayer) aPlayer.pause();
+  if (modal) modal.classList.add('hidden');
+}
+</script>
 
 <style>
 * { scrollbar-width: thin; scrollbar-color: rgba(156, 163, 175, 0.3) transparent; }
