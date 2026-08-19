@@ -207,9 +207,9 @@ function formatDuration(seconds) {
             </div>
             <div class="text-xs font-mono">
               <% if (hasKeyframeIssue) { %>
-                <span class="text-[#fbbf24] font-medium">Keyframe: >3.5s (Fix Needed)</span>
+                <span class="text-[#fbbf24] font-medium">Keyframe: <%= video.keyframe_interval || '10.0s' %> (Fix Needed)</span>
               <% } else { %>
-                <span class="text-gray-400">Keyframe: 2.0s</span>
+                <span class="text-gray-400">Keyframe: <%= video.keyframe_interval || '2.0s' %></span>
               <% } %>
             </div>
             <% } else { %>
@@ -1622,7 +1622,7 @@ document.addEventListener('DOMContentLoaded', function() {
               <span>${fpsText}</span>
             </div>
             <div class="text-xs font-mono">
-              ${hasKeyframeIssue ? `<span class="text-[#fbbf24] font-medium">Keyframe: >3.5s (Fix Needed)</span>` : `<span class="text-gray-400">Keyframe: 2.0s</span>`}
+              ${hasKeyframeIssue ? `<span class="text-[#fbbf24] font-medium">Keyframe: ${video.keyframe_interval || '10.0s'} (Fix Needed)</span>` : `<span class="text-gray-400">Keyframe: ${video.keyframe_interval || '2.0s'}</span>`}
             </div>` : `
             <div class="text-xs text-[#a78bfa] font-mono">
               ${bitrateText} • AAC

@@ -88,7 +88,8 @@ async function analyzeVideoHealth(videoPath) {
       targetBitrate,
       resolution,
       isLowBitrate,
-      isKeyframeIssue
+      isKeyframeIssue,
+      keyframeInterval: maxInterval > 0 ? `${maxInterval.toFixed(1)}s` : (isKeyframeIssue ? '10.0s' : '2.0s')
     };
   } catch (err) {
     return { status: 'ok', error: err.message, bitrateKbps: 3500, targetBitrate: 4000 };

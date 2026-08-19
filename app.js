@@ -843,7 +843,8 @@ app.get('/gallery', isAuthenticated, async (req, res) => {
           health_status: health.status,
           bitrate_kbps: health.bitrateKbps || (v.bitrate ? Math.round(v.bitrate/1000) : 3500),
           is_keyframe_issue: health.isKeyframeIssue || false,
-          is_low_bitrate: health.isLowBitrate || false
+          is_low_bitrate: health.isLowBitrate || false,
+          keyframe_interval: health.keyframeInterval || (health.isKeyframeIssue ? '10.0s' : '2.0s')
         };
       } catch (e) {
         return v;
@@ -885,7 +886,8 @@ app.get('/api/gallery/data', isAuthenticated, async (req, res) => {
           health_status: health.status,
           bitrate_kbps: health.bitrateKbps || (v.bitrate ? Math.round(v.bitrate/1000) : 3500),
           is_keyframe_issue: health.isKeyframeIssue || false,
-          is_low_bitrate: health.isLowBitrate || false
+          is_low_bitrate: health.isLowBitrate || false,
+          keyframe_interval: health.keyframeInterval || (health.isKeyframeIssue ? '10.0s' : '2.0s')
         };
       } catch (e) {
         return v;
