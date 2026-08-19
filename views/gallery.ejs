@@ -1538,6 +1538,9 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="flex items-center justify-between">
             <span class="text-xs text-gray-400">${formatFileSize(video.file_size || 0)}</span>
             <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button class="file-optimize-btn text-blue-400 hover:text-blue-300 p-1" data-video-id="${escapeHtml(video.id)}" data-video-title="${title}" title="Optimize Keyframe & Bitrate (GPU NVENC)" onclick="event.stopPropagation(); openOptimizationModal('${escapeHtml(video.id)}', '${title}')">
+                <i class="ti ti-bolt text-sm"></i>
+              </button>
               <button class="file-rename-btn text-gray-400 hover:text-white p-1" data-video-id="${escapeHtml(video.id)}" data-video-title="${title}">
                 <i class="ti ti-pencil text-sm"></i>
               </button>
@@ -1606,6 +1609,9 @@ document.addEventListener('DOMContentLoaded', function() {
         <td class="px-4 py-3 text-sm text-gray-400">${formatGalleryDate(video.upload_date || video.created_at)}</td>
         <td class="px-4 py-3 text-right">
           <div class="flex items-center justify-end gap-1">
+            <button class="file-optimize-btn p-1.5 hover:bg-dark-600 rounded text-blue-400 hover:text-blue-300 transition-colors" data-video-id="${escapeHtml(video.id)}" data-video-title="${title}" title="Optimize Keyframe & Bitrate (GPU NVENC)" onclick="event.stopPropagation(); openOptimizationModal('${escapeHtml(video.id)}', '${title}')">
+              <i class="ti ti-bolt text-sm"></i>
+            </button>
             <button class="file-rename-btn p-1.5 hover:bg-dark-600 rounded text-gray-400 hover:text-white transition-colors" data-video-id="${escapeHtml(video.id)}" data-video-title="${title}">
               <i class="ti ti-pencil text-sm"></i>
             </button>
@@ -2105,7 +2111,170 @@ async function startYoutubeImport() {
   }
 }
 
+// VIDEO OPTIMIZATION (GPU NVENC) FUNCTIONS
+let currentOptVideoId = null;
+let optProgressInterval = null;
+
+async function openOptimizationModal(videoId, videoTitle) {
+  currentOptVideoId = videoId;
+  const modal = document.getElementById('videoOptimizationModal');
+  document.getElementById('optVideoTitle').textContent = videoTitle || 'Optimizing Video';
+  document.getElementById('optHealthBitrate').textContent = 'Analyzing...';
+  document.getElementById('optHealthGop').textContent = 'Analyzing...';
+  document.getElementById('optHealthStatusBadge').innerHTML = '<div class="text-xs text-gray-400 animate-pulse">Running health check...</div>';
+  document.getElementById('optProgressContainer').classList.add('hidden');
+  document.getElementById('optActionsContainer').classList.remove('hidden');
+
+  modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch(`/api/videos/${videoId}/health-status`);
+    const data = await res.json();
+    if (data.success && data.data) {
+      const h = data.data;
+      document.getElementById('optHealthBitrate').textContent = `${h.bitrateKbps || 0} Kbps (Target: ${h.targetBitrate || 4000} Kbps)`;
+      document.getElementById('optHealthGop').textContent = h.isKeyframeIssue ? '⚠️ GOP > 3.5s (Keyframe Fix Needed)' : '✅ 2s GOP (YouTube Compliant)';
+      
+      let badgeHtml = '';
+      if (h.status === 'bitrate_and_keyframe_issue') {
+        badgeHtml = '<div class="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-medium flex items-center gap-2"><i class="ti ti-alert-triangle text-base"></i> Recommended: Fix Bitrate & Keyframe (Bitrate low & Keyframe GOP too wide)</div>';
+      } else if (h.status === 'keyframe_issue') {
+        badgeHtml = '<div class="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium flex items-center gap-2"><i class="ti ti-alert-circle text-base"></i> Recommended: Fix Keyframe Only (GOP interval > 3.5s)</div>';
+      } else {
+        badgeHtml = '<div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium flex items-center gap-2"><i class="ti ti-check text-base"></i> Video is Healthy & Fully Compliant with YouTube Live standards</div>';
+      }
+      document.getElementById('optHealthStatusBadge').innerHTML = badgeHtml;
+    }
+  } catch (err) {
+    console.error('Health status check error:', err);
+  }
+}
+
+function closeOptimizationModal() {
+  const modal = document.getElementById('videoOptimizationModal');
+  modal.classList.add('hidden');
+  if (optProgressInterval) {
+    clearInterval(optProgressInterval);
+    optProgressInterval = null;
+  }
+}
+
+async function startOptimization(type) {
+  if (!currentOptVideoId) return;
+  const endpoint = type === 'keyframe' ? `/api/videos/${currentOptVideoId}/optimize-keyframe` : `/api/videos/${currentOptVideoId}/optimize-bitrate`;
+  
+  try {
+    const res = await fetch(endpoint, { method: 'POST' });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('error', data.error || 'Failed to start optimization');
+      return;
+    }
+    showToast('success', data.message || 'Optimization task started');
+    document.getElementById('optProgressContainer').classList.remove('hidden');
+    
+    if (optProgressInterval) clearInterval(optProgressInterval);
+    optProgressInterval = setInterval(() => checkOptimizationProgress(currentOptVideoId), 1000);
+  } catch (err) {
+    showToast('error', 'Error starting optimization task');
+  }
+}
+
+async function checkOptimizationProgress(videoId) {
+  try {
+    const res = await fetch(`/api/videos/${videoId}/optimize-progress`);
+    const data = await res.json();
+    if (data.active) {
+      const p = data.progress || 0;
+      document.getElementById('optProgressBar').style.width = `${p}%`;
+      document.getElementById('optProgressPercent').textContent = `${p}%`;
+      document.getElementById('optProgressStatusText').textContent = data.status === 'processing' ? 'Rendering with GPU (NVENC)...' : data.status;
+      document.getElementById('optProgressEta').textContent = `ETA: ${data.eta || '--'}`;
+      document.getElementById('optProgressSpeed').textContent = `Speed: ${data.speed || '--'}`;
+    } else {
+      if (optProgressInterval) clearInterval(optProgressInterval);
+      optProgressInterval = null;
+      document.getElementById('optProgressBar').style.width = `100%`;
+      document.getElementById('optProgressPercent').textContent = `100%`;
+      document.getElementById('optProgressStatusText').textContent = '✅ Optimization Complete!';
+      showToast('success', 'Video optimization completed!');
+      setTimeout(() => {
+        closeOptimizationModal();
+        if (window.refreshGalleryData) window.refreshGalleryData();
+      }, 1500);
+    }
+  } catch (e) {
+    console.error('Progress check error:', e);
+  }
+}
+
 </script>
+
+<!-- VIDEO HEALTH & OPTIMIZATION MODAL (GPU NVENC) -->
+<div id="videoOptimizationModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden modal-overlay flex items-center justify-center p-4">
+  <div class="bg-dark-800 border border-dark-700 rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-5 m-auto">
+    <div class="flex items-center justify-between border-b border-dark-700 pb-4">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+          <i class="ti ti-bolt text-xl"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-white">Video Optimization (GPU NVENC)</h3>
+          <p class="text-xs text-gray-400" id="optVideoTitle">Optimizing video for YouTube Live streaming</p>
+        </div>
+      </div>
+      <button type="button" onclick="closeOptimizationModal()" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-dark-700 transition-colors">
+        <i class="ti ti-x text-lg"></i>
+      </button>
+    </div>
+
+    <!-- Health Analysis Card -->
+    <div id="optHealthContainer" class="bg-dark-900/90 border border-dark-700 rounded-xl p-4 space-y-3">
+      <div class="flex items-center justify-between text-xs">
+        <span class="text-gray-400">Resolution & Bitrate:</span>
+        <span id="optHealthBitrate" class="font-mono text-white font-semibold">Loading...</span>
+      </div>
+      <div class="flex items-center justify-between text-xs">
+        <span class="text-gray-400">Keyframe GOP Interval:</span>
+        <span id="optHealthGop" class="font-mono text-white font-semibold">Loading...</span>
+      </div>
+      <div id="optHealthStatusBadge" class="pt-1"></div>
+    </div>
+
+    <!-- Optimization Progress Bar -->
+    <div id="optProgressContainer" class="hidden space-y-3 bg-blue-950/30 border border-blue-800/40 rounded-xl p-4">
+      <div class="flex items-center justify-between text-xs font-semibold">
+        <span class="text-blue-400 flex items-center gap-2">
+          <i class="ti ti-loader animate-spin"></i>
+          <span id="optProgressStatusText">Rendering with GPU (NVENC)...</span>
+        </span>
+        <span id="optProgressPercent" class="text-white font-mono">0%</span>
+      </div>
+      <div class="w-full bg-dark-950 rounded-full h-2 overflow-hidden border border-dark-700">
+        <div id="optProgressBar" class="bg-blue-500 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+      </div>
+      <div class="flex items-center justify-between text-[11px] text-gray-400 font-mono">
+        <span id="optProgressEta">ETA: --</span>
+        <span id="optProgressSpeed">Speed: --</span>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div id="optActionsContainer" class="space-y-2.5 pt-1">
+      <button type="button" onclick="startOptimization('keyframe')" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer">
+        <i class="ti ti-bolt text-sm"></i>
+        <span>Fix Keyframe Only (2s GOP - GPU NVENC)</span>
+      </button>
+      <button type="button" onclick="startOptimization('bitrate')" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer">
+        <i class="ti ti-rocket text-sm"></i>
+        <span>Fix Bitrate & Keyframe (YouTube Best Practice - GPU NVENC)</span>
+      </button>
+      <button type="button" onclick="closeOptimizationModal()" class="w-full py-2 px-4 bg-dark-700 hover:bg-dark-600 text-gray-300 text-xs font-semibold rounded-xl transition-all cursor-pointer">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
 
 <style>
 * { scrollbar-width: thin; scrollbar-color: rgba(156, 163, 175, 0.3) transparent; }
