@@ -832,7 +832,23 @@ app.get('/gallery', isAuthenticated, async (req, res) => {
     if (currentFolderId && !currentFolder) {
       return res.redirect('/gallery');
     }
-    const videos = await Video.findByUserAndFolder(req.session.userId, currentFolderId);
+    const rawVideos = await Video.findByUserAndFolder(req.session.userId, currentFolderId);
+    const videos = await Promise.all(rawVideos.map(async (v) => {
+      if (!v.filepath) return v;
+      const rawPath = path.join(__dirname, 'public', v.filepath);
+      try {
+        const health = await videoOptimizationService.analyzeVideoHealth(rawPath);
+        return {
+          ...v,
+          health_status: health.status,
+          bitrate_kbps: health.bitrateKbps || (v.bitrate ? Math.round(v.bitrate/1000) : 3500),
+          is_keyframe_issue: health.isKeyframeIssue || false,
+          is_low_bitrate: health.isLowBitrate || false
+        };
+      } catch (e) {
+        return v;
+      }
+    }));
     res.render('gallery', {
       title: 'Video Gallery',
       active: 'gallery',
@@ -858,7 +874,24 @@ app.get('/api/gallery/data', isAuthenticated, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Folder not found' });
     }
 
-    const videos = await Video.findByUserAndFolder(req.session.userId, currentFolderId);
+    const rawVideos = await Video.findByUserAndFolder(req.session.userId, currentFolderId);
+    const videos = await Promise.all(rawVideos.map(async (v) => {
+      if (!v.filepath) return v;
+      const rawPath = path.join(__dirname, 'public', v.filepath);
+      try {
+        const health = await videoOptimizationService.analyzeVideoHealth(rawPath);
+        return {
+          ...v,
+          health_status: health.status,
+          bitrate_kbps: health.bitrateKbps || (v.bitrate ? Math.round(v.bitrate/1000) : 3500),
+          is_keyframe_issue: health.isKeyframeIssue || false,
+          is_low_bitrate: health.isLowBitrate || false
+        };
+      } catch (e) {
+        return v;
+      }
+    }));
+
     res.json({
       success: true,
       videos,
