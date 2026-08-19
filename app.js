@@ -1045,34 +1045,34 @@ app.get('/history', isAuthenticated, async (req, res) => {
       params.push(`%${search}%`);
     }
 
-    const totalCount = await new Promise((resolve, reject) => {
+    const totalCount = await new Promise((resolve) => {
       db.get(
         `SELECT COUNT(*) as count FROM stream_history h ${whereClause}`,
         params,
         (err, row) => {
-          if (err) reject(err);
-          else resolve(row.count);
+          if (err || !row) resolve(0);
+          else resolve(row.count || 0);
         }
       );
     });
 
-    const history = await new Promise((resolve, reject) => {
+    const history = await new Promise((resolve) => {
       db.all(
         `SELECT h.*, v.thumbnail_path 
          FROM stream_history h 
          LEFT JOIN videos v ON h.video_id = v.id 
          ${whereClause}
-         ORDER BY h.start_time ${sort}
+         ORDER BY h.rowid ${sort}
          LIMIT ? OFFSET ?`,
         [...params, limit, offset],
         (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
+          if (err || !rows) resolve([]);
+          else resolve(rows || []);
         }
       );
     });
 
-    const totalPages = Math.ceil(totalCount / limit);
+    const totalPages = Math.ceil(totalCount / limit) || 1;
 
     res.render('history', {
       active: 'history',

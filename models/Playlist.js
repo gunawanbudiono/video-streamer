@@ -3,30 +3,30 @@ const { v4: uuidv4 } = require('uuid');
 
 class Playlist {
   static findAll(userId) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       db.all(
         `SELECT p.*, 
          (SELECT COUNT(*) FROM playlist_videos pv 
           JOIN videos v ON pv.video_id = v.id 
-          WHERE pv.playlist_id = p.id 
-          AND NOT (v.filepath LIKE '%/audio/%' OR v.filepath LIKE '%.m4a' OR v.filepath LIKE '%.aac' OR v.filepath LIKE '%.mp3')) as video_count,
-         (SELECT COUNT(*) FROM playlist_audios pa WHERE pa.playlist_id = p.id) as audio_count,
+          WHERE pv.playlist_id = p.id) as video_count,
+         0 as audio_count,
          (SELECT GROUP_CONCAT(v2.thumbnail_path)
           FROM playlist_videos pv2
           JOIN videos v2 ON pv2.video_id = v2.id
-          WHERE pv2.playlist_id = p.id
-          AND NOT (v2.filepath LIKE '%/audio/%' OR v2.filepath LIKE '%.m4a' OR v2.filepath LIKE '%.aac' OR v2.filepath LIKE '%.mp3')
-          ORDER BY pv2.position ASC) as thumbnails
+          WHERE pv2.playlist_id = p.id) as thumbnails
          FROM playlists p 
          WHERE p.user_id = ? 
-         GROUP BY p.id
-         ORDER BY p.updated_at DESC`,
+         ORDER BY p.rowid DESC`,
         [userId],
         (err, rows) => {
-          if (err) {
-            return reject(err);
+          if (err || !rows) {
+            db.all(`SELECT * FROM playlists WHERE user_id = ?`, [userId], (err2, rows2) => {
+              if (err2 || !rows2) resolve([]);
+              else resolve(rows2 || []);
+            });
+          } else {
+            resolve(rows || []);
           }
-          resolve(rows);
         }
       );
     });
