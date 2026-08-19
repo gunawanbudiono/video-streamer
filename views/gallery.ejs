@@ -158,37 +158,38 @@ function formatDuration(seconds) {
         const fpsText = (video.fps || 30) + ' FPS';
         const isHealthy = bitrateVal >= 3500000;
       %>
-      <div class="gallery-grid-item file-item group bg-dark-800 rounded-xl overflow-hidden border border-dark-700 hover:border-gray-600 transition-all cursor-pointer flex flex-col justify-between"
+      <div class="gallery-grid-item file-item group bg-[#18181b] rounded-2xl overflow-hidden border border-[#27272a] hover:border-gray-600 transition-all cursor-pointer flex flex-col justify-between"
         data-id="<%= video.id %>" data-kind="file" data-title="<%= video.title %>" data-date="<%= video.upload_date || video.created_at %>" data-size="<%= video.size || video.file_size || 0 %>" data-type="<%= mediaType %>"
         draggable="true">
         <div>
-          <div class="aspect-video relative overflow-hidden bg-dark-900">
-            <% if (isAudio) { %>
-            <div class="w-full h-full flex items-center justify-center bg-[#181818]">
-              <div class="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
-                <i class="ti ti-music text-3xl text-primary"></i>
-              </div>
-            </div>
-            <% } else { %>
+          <% if (isAudio) { %>
+          <div class="aspect-video relative overflow-hidden bg-gradient-to-br from-[#1e1333] to-[#120a21] flex items-center justify-center">
+            <i class="ti ti-music text-4xl text-[#a78bfa]"></i>
+            <span class="absolute top-2.5 right-2.5 bg-black/60 text-white text-[11px] px-2 py-0.5 rounded-md flex items-center gap-1 font-medium">
+              <i class="ti ti-music text-xs text-[#a78bfa]"></i> Audio
+            </span>
+          </div>
+          <% } else { %>
+          <div class="aspect-video relative overflow-hidden bg-black">
             <img src="<%= video.thumbnail_path %>" alt="<%= video.title %>" class="w-full h-full object-cover">
-            <% } %>
             <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-              <div class="bg-primary/90 w-10 h-10 rounded-full flex items-center justify-center">
-                <i class="ti ti-player-play-filled text-white"></i>
+              <div class="bg-blue-600 w-12 h-12 rounded-full flex items-center justify-center shadow-lg shadow-blue-600/40">
+                <i class="ti ti-player-play-filled text-white text-xl"></i>
               </div>
             </div>
-            <span class="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-0.5 rounded font-mono">
+            <span class="absolute bottom-2.5 right-2.5 bg-black/80 text-white text-[11px] px-2 py-0.5 rounded-md font-mono">
               <%= formatDuration(video.duration) %>
             </span>
           </div>
-          <div class="p-3.5 space-y-2">
+          <% } %>
+          <div class="p-4 space-y-2.5">
             <div class="flex items-start justify-between gap-2">
-              <h3 class="font-semibold text-sm text-white truncate max-w-[170px]" title="<%= video.title %>"><%= video.title %></h3>
+              <h3 class="font-semibold text-sm text-white truncate max-w-[160px]" title="<%= video.title %>"><%= video.title %></h3>
               <% if (!isAudio) { %>
                 <% if (isHealthy) { %>
-                  <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1"><i class="ti ti-check"></i> Ready</span>
+                  <span class="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#132a1e] text-[#34d399] border border-[#065f46] flex items-center gap-1"><i class="ti ti-check text-xs"></i> Ready</span>
                 <% } else { %>
-                  <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1"><i class="ti ti-alert-triangle"></i> Low Bitrate</span>
+                  <span class="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#2a2215] text-[#fbbf24] border border-[#78350f] flex items-center gap-1"><i class="ti ti-alert-triangle text-xs"></i> Low Bitrate</span>
                 <% } %>
               <% } %>
             </div>
@@ -196,7 +197,7 @@ function formatDuration(seconds) {
             <div class="text-xs text-gray-400 font-mono flex items-center gap-1.5 flex-wrap">
               <span><%= resText %></span>
               <span>•</span>
-              <span class="text-amber-400 font-semibold"><%= bitrateText %></span>
+              <span class="text-[#fbbf24] font-semibold"><%= bitrateText %></span>
               <span>•</span>
               <span><%= fpsText %></span>
             </div>
@@ -204,32 +205,32 @@ function formatDuration(seconds) {
               Keyframe: 2.0s
             </div>
             <% } else { %>
-            <div class="text-xs text-purple-400 font-mono">
+            <div class="text-xs text-[#a78bfa] font-mono">
               <%= bitrateText %> • AAC
             </div>
             <% } %>
-            <div id="cardProgress-<%= video.id %>" class="hidden mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-400">
-              <span class="flex items-center gap-1.5 font-medium">
-                <i class="ti ti-settings animate-spin"></i> GPU Processing... <span id="cardProgressPct-<%= video.id %>">0%</span>
+            <div id="cardProgress-<%= video.id %>" class="hidden mt-2 p-2.5 rounded-xl bg-[#2a2215] border border-[#78350f] flex items-center justify-between text-xs text-[#fbbf24]">
+              <span class="flex items-center gap-2 font-medium">
+                <i class="ti ti-settings animate-spin text-sm"></i> GPU Processing... <span id="cardProgressPct-<%= video.id %>">0%</span>
               </span>
-              <button type="button" onclick="event.stopPropagation(); cancelCardOptimization('<%= video.id %>')" class="text-amber-400 hover:text-white">
+              <button type="button" onclick="event.stopPropagation(); cancelCardOptimization('<%= video.id %>')" class="text-[#fbbf24] hover:text-white">
                 <i class="ti ti-x"></i>
               </button>
             </div>
           </div>
         </div>
-        <div class="px-3.5 pb-3.5 pt-1 border-t border-dark-700/50 flex items-center justify-between mt-auto">
+        <div class="px-4 pb-4 pt-1 border-t border-[#27272a]/60 flex items-center justify-between mt-auto">
           <span class="text-xs text-gray-400 font-mono"><%= formatFileSize(video.size || video.file_size || 0) %></span>
           <div class="flex items-center gap-2">
             <% if (!isAudio) { %>
-            <button type="button" class="px-2.5 py-1 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 hover:text-amber-300 text-xs font-bold rounded-lg border border-amber-500/30 transition-all flex items-center gap-1 cursor-pointer" onclick="event.stopPropagation(); openOptimizationModal('<%= video.id %>', '<%= video.title %>')">
+            <button type="button" class="px-3 py-1 bg-[#392b15] hover:bg-[#4d3a1b] text-[#fcd34d] text-xs font-bold rounded-lg border border-[#78350f]/60 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm" onclick="event.stopPropagation(); openOptimizationModal('<%= video.id %>', '<%= video.title %>')">
               <i class="ti ti-wand text-xs"></i> <span>✨ Optimize</span>
             </button>
             <% } %>
-            <button type="button" class="text-gray-400 hover:text-white p-1" onclick="event.stopPropagation(); showRenameDialog('<%= video.id %>', '<%= video.title %>')">
+            <button type="button" class="text-gray-400 hover:text-white p-1 transition-colors" onclick="event.stopPropagation(); showRenameDialog('<%= video.id %>', '<%= video.title %>')">
               <i class="ti ti-pencil text-sm"></i>
             </button>
-            <button type="button" class="text-gray-400 hover:text-red-400 p-1" onclick="event.stopPropagation(); showDeleteDialog('<%= video.id %>', '<%= video.title %>')">
+            <button type="button" class="text-gray-400 hover:text-red-400 p-1 transition-colors" onclick="event.stopPropagation(); showDeleteDialog('<%= video.id %>', '<%= video.title %>')">
               <i class="ti ti-trash text-sm"></i>
             </button>
           </div>
