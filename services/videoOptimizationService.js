@@ -47,12 +47,12 @@ async function analyzeVideoHealth(videoPath) {
 
     // Sample keyframe interval check
     let isKeyframeIssue = false;
+    let maxInterval = 0;
     try {
       const gopCmd = `ffprobe -v error -select_streams v:0 -show_entries frame=pkt_pts_time,key_frame -of csv=p=0 "${videoPath}" | head -n 120`;
       const gopOutput = execSync(gopCmd, { encoding: 'utf8', timeout: 5000 });
       const lines = gopOutput.trim().split('\n');
       let lastKeyframeTime = null;
-      let maxInterval = 0;
 
       for (const line of lines) {
         const parts = line.split(',');
