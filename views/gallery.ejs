@@ -2241,7 +2241,7 @@ async function openOptimizationModal(videoId, videoTitle) {
     if (data.success && data.data) {
       const h = data.data;
       document.getElementById('optHealthBitrate').textContent = `${h.bitrateKbps || 0} Kbps (Target: ${h.targetBitrate || 4000} Kbps)`;
-      document.getElementById('optHealthGop').textContent = h.isKeyframeIssue ? '⚠️ GOP > 3.5s (Keyframe Fix Needed)' : '✅ 2s GOP (YouTube Compliant)';
+      document.getElementById('optHealthGop').textContent = h.isKeyframeIssue ? '⚠️ GOP > 3.5s (Keyframe Issue)' : '✅ 2s GOP (YouTube Compliant)';
       
       let badgeHtml = '';
       if (h.status === 'bitrate_and_keyframe_issue') {
