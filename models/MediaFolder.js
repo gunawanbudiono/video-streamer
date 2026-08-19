@@ -8,15 +8,15 @@ class MediaFolder {
 
     return new Promise((resolve, reject) => {
       db.run(
-        `INSERT INTO media_folders (id, name, user_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)`,
-        [id, name, user_id, now, now],
+        `INSERT INTO media_folders (id, name, user_id, created_at)
+         VALUES (?, ?, ?, ?)`,
+        [id, name, user_id, now],
         function(err) {
           if (err) {
             console.error('Error creating media folder:', err.message);
             return reject(err);
           }
-          resolve({ id, name, user_id, created_at: now, updated_at: now });
+          resolve({ id, name, user_id, created_at: now });
         }
       );
     });
