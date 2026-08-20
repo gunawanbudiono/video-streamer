@@ -907,6 +907,24 @@ app.get('/api/gallery/data', isAuthenticated, async (req, res) => {
   }
 });
 
+app.get('/api/media-folders', isAuthenticated, async (req, res) => {
+  try {
+    const folders = await MediaFolder.findAllByUser(req.session.userId);
+    res.json({ success: true, folders });
+  } catch (error) {
+    console.error('Error fetching media folders:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch folders' });
+  }
+});
+app.get('/api/folders', isAuthenticated, async (req, res) => {
+  try {
+    const folders = await MediaFolder.findAllByUser(req.session.userId);
+    res.json({ success: true, folders });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch folders' });
+  }
+});
+
 app.post('/api/media-folders', isAuthenticated, [
   body('name').trim().notEmpty().withMessage('Folder name is required').isLength({ max: 80 }).withMessage('Folder name is too long')
 ], async (req, res) => {
